@@ -1,6 +1,6 @@
-// src/pages/Admin.jsx
+
 import React, { useEffect, useState } from 'react'
-import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table } from 'react-bootstrap'
+import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Badge } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
 import { getCampaigns, setActiveCampaign, getDictionaries } from '../services/api.js'
 import { pad2 } from '../utils/sku.js'
@@ -20,7 +20,6 @@ export default function Admin() {
   const [authOK, setAuthOK] = useState(false)
   const [error, setError] = useState(null)
 
-  // NEW: diccionarios para etiquetar códigos con nombres
   const [dic, setDic] = useState(null)
 
   const [dicEjemplo, setDicEjemplo] = useState(JSON.stringify({
@@ -43,13 +42,11 @@ export default function Admin() {
   const [discrepSuc, setDiscrepSuc] = useState([])
 
   useEffect(() => {
-    // Probar token si había uno guardado
     if (token) {
       adminSetToken(token)
       adminPing().then(() => setAuthOK(true)).catch(() => setAuthOK(false))
     }
     cargarCampanias()
-    // NEW: cargar diccionarios para etiquetar
     getDictionaries().then(setDic).catch(() => {})
   }, [])
 
@@ -82,7 +79,6 @@ export default function Admin() {
       const payload = JSON.parse(dicEjemplo)
       const r = await importarDiccionariosJSON(payload)
       alert('OK: ' + JSON.stringify(r))
-      // refrescar dic para que etiquetas muestren nombres nuevos
       getDictionaries().then(setDic)
     } catch (e) {
       setError(e.message || 'Error importando diccionarios (¿JSON válido?)')
@@ -155,7 +151,6 @@ export default function Admin() {
     }
   }
 
-  // Helpers descarga
   function descargarBlobDirecto(blob, nombre) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -175,7 +170,7 @@ export default function Admin() {
     }
   }
 
-  // NEW: helpers de etiquetas "cod · nombre"
+  // === Helpers UI ===
   function etiqueta(dicArr, cod) {
     if (!cod) return '—'
     const c = pad2(cod)
@@ -185,6 +180,15 @@ export default function Admin() {
   function etiquetas(dicArr, lista) {
     if (!lista?.length) return '—'
     return lista.map(c => etiqueta(dicArr, c)).join(', ')
+  }
+  function variantEstado(estado) {
+    if (estado === 'OK') return 'success'
+    if (estado === 'REVISAR') return 'warning'
+    if (estado === 'NO_MAESTRO') return 'danger'
+    return 'secondary'
+  }
+  function BadgeEstado({ estado }) {
+    return <Badge bg={variantEstado(estado)}>{estado}</Badge>
   }
 
   return (
@@ -353,17 +357,25 @@ export default function Admin() {
                 </tr>
               </thead>
               <tbody>
-                {discrepancias.map((d,i) => (
-                  <tr key={i}>
-                    <td>{d.sku}</td><td>{d.sucursal || '—'}</td><td>{d.email || '—'}</td><td>{d.estado}</td>
-                    <td>{etiqueta(dic?.categorias, d.maestro?.categoria_cod)}</td>
-                    <td>{etiqueta(dic?.categorias, d.asumidos?.categoria_cod)}</td>
-                    <td>{etiqueta(dic?.tipos, d.maestro?.tipo_cod)}</td>
-                    <td>{etiqueta(dic?.tipos, d.asumidos?.tipo_cod)}</td>
-                    <td>{etiqueta(dic?.clasif, d.maestro?.clasif_cod)}</td>
-                    <td>{etiqueta(dic?.clasif, d.asumidos?.clasif_cod)}</td>
-                  </tr>
-                ))}
+                {discrepancias.map((d,i) => {
+                  const rowClass =
+                    d.estado === 'REVISAR' ? 'table-warning' :
+                    d.estado === 'NO_MAESTRO' ? 'table-danger' : ''
+                  return (
+                    <tr key={i} className={rowClass}>
+                      <td>{d.sku}</td>
+                      <td>{d.sucursal || '—'}</td>
+                      <td>{d.email || '—'}</td>
+                      <td><BadgeEstado estado={d.estado} /></td>
+                      <td>{etiqueta(dic?.categorias, d.maestro?.categoria_cod)}</td>
+                      <td>{etiqueta(dic?.categorias, d.asumidos?.categoria_cod)}</td>
+                      <td>{etiqueta(dic?.tipos, d.maestro?.tipo_cod)}</td>
+                      <td>{etiqueta(dic?.tipos, d.asumidos?.tipo_cod)}</td>
+                      <td>{etiqueta(dic?.clasif, d.maestro?.clasif_cod)}</td>
+                      <td>{etiqueta(dic?.clasif, d.asumidos?.clasif_cod)}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </Table>
 
@@ -386,13 +398,15 @@ export default function Admin() {
               </tbody>
             </Table>
           </Tab>
+
+          {/* Nueva pestaña: Revisiones con filtros y cola */}
           <Tab eventKey="revisiones" title="Revisiones">
-    <Revisiones
-      campanias={campanias}
-      campaniaIdDefault={(campanias.find(c => c.activa)?.id || campanias[0]?.id)}
-      authOK={authOK}
-    />
-  </Tab>
+            <Revisiones
+              campanias={campanias}
+              campaniaIdDefault={(campanias.find(c=>c.activa)?.id || campanias[0]?.id)}
+              authOK={authOK}
+            />
+          </Tab>
         </Tabs>
       </Container>
     </div>

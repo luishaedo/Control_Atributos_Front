@@ -107,3 +107,20 @@ export async function exportClasifCSV() {
   const r = await fetchAuth('/admin/export/clasif.csv')
   return r.blob()
 }
+
+export async function exportTxtCategoria(campaniaId, estado = 'aceptadas') {
+  const url = `/admin/export/txt/categoria?campaniaId=${encodeURIComponent(campaniaId)}&estado=${encodeURIComponent(estado)}`
+  const r = await fetchAuth(url)
+  return r.blob()
+}
+export async function exportTxtTipo(campaniaId, estado = 'aceptadas') {
+  const url = `/admin/export/txt/tipo?campaniaId=${encodeURIComponent(campaniaId)}&estado=${encodeURIComponent(estado)}`
+  const r = await fetchAuth(url)
+  return r.blob()
+}
+export async function exportTxtClasif(campaniaId, estado = 'aceptadas') {
+  const url = `/admin/export/txt/clasif?campaniaId=${encodeURIComponent(campaniaId)}&estado=${encodeURIComponent(estado)}`
+  const r = await fetchAuth(url)
+  return r.blob()
+}
+

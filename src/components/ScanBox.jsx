@@ -158,8 +158,8 @@ export default function ScanBox({ user, campania }) {
                 <thead>
                   <tr>
                     <th>Campo</th>
-                    <th>Maestro</th>
-                    <th>Asumidos</th>
+                    <th>Dragonfish</th>
+                    <th>Sugeridos</th>
                   </tr>
                 </thead>
                 <tbody>
