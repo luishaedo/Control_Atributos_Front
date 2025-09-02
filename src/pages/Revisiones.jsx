@@ -5,13 +5,15 @@ import { getDictionaries } from '../services/api'
 import { pad2 } from '../utils/sku'
 import {
   getRevisiones, decidirRevision, listarActualizaciones,
-  exportActualizacionesCSV, aplicarActualizaciones
+  exportActualizacionesCSV, aplicarActualizaciones,
+  exportTxtCategoria, exportTxtTipo, exportTxtClasif,   // TXT backend
+  undoActualizacion, revertirActualizacion              // Undo / Revert
 } from '../services/adminApi'
 
 function etiqueta(dicArr, cod) {
   if (!cod) return '—'
   const c = pad2(cod)
-  const it = (dicArr||[]).find(x => x.cod === c)
+  const it = (dicArr || []).find(x => x.cod === c)
   return it ? `${c} · ${it.nombre}` : c
 }
 
@@ -32,19 +34,36 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [cola, setCola] = useState([])
   const [seleccion, setSeleccion] = useState([])
 
-  // Filtro nuevo: qué propuestas mostrar
+  // Filtros
   const [filtroDecision, setFiltroDecision] = useState('pendientes') // 'pendientes' | 'aceptadas' | 'rechazadas' | 'todas'
+  const [filtroEstadoCola, setFiltroEstadoCola] = useState('') // '', 'pendiente', 'aplicada', 'rechazada'
   const [mostrarCola, setMostrarCola] = useState(false)
   const colaRef = useRef(null)
 
-  useEffect(() => { getDictionaries().then(setDic).catch(()=>{}) }, [])
+  useEffect(() => { getDictionaries().then(setDic).catch(() => {}) }, [])
 
   async function cargar() {
-    const data = await getRevisiones({ campaniaId, sku, consenso, soloConDiferencias: String(soloDif) })
+    const data = await getRevisiones({
+      campaniaId,
+      sku,
+      consenso,
+      soloConDiferencias: String(soloDif)
+    })
     setItems(data.items || [])
-    const acts = await listarActualizaciones(Number(campaniaId))
+
+    // cola (con filtro de estado si lo hay)
+    const acts = await listarActualizaciones(Number(campaniaId), {
+      estado: filtroEstadoCola || undefined
+    })
+    console.log('[cola] items:', acts?.items?.length, { estado: filtroEstadoCola })
     setCola(acts.items || [])
   }
+
+  useEffect(() => {
+    if (!authOK || !campaniaId) return
+    cargar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaniaId, filtroEstadoCola, authOK])
 
   async function onAceptar(sku, prop) {
     await decidirRevision({
@@ -54,6 +73,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       decidedBy: 'admin@local',
       aplicarAhora: false
     })
+    setMostrarCola(true)
     await cargar()
   }
 
@@ -64,6 +84,22 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       decision: 'rechazar',
       decidedBy: 'admin@local'
     })
+    setMostrarCola(true)
+    await cargar()
+  }
+
+  async function onUndoDecision(decisionId) {
+    await undoActualizacion(decisionId)
+    await cargar()
+  }
+
+  async function onUndoRow(id) {
+    await undoActualizacion(id)
+    await cargar()
+  }
+
+  async function onRevertRow(id) {
+    await revertirActualizacion(id)
     await cargar()
   }
 
@@ -80,15 +116,58 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   }
 
   function toggleSel(id) {
-    setSeleccion(sel => sel.includes(id) ? sel.filter(x => x!==id) : [...sel, id])
+    setSeleccion(sel => sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id])
   }
 
+  // TXT globales (desde backend)
   function descargarBlobDirecto(blob, nombre) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url; a.download = nombre
     document.body.appendChild(a); a.click(); a.remove()
     URL.revokeObjectURL(url)
+  }
+  async function onExportTxtCat(estado = 'aceptadas') {
+    const b = await exportTxtCategoria(Number(campaniaId), estado)
+    descargarBlobDirecto(b, `categoria_${campaniaId}_${estado}.txt`)
+  }
+  async function onExportTxtTipo(estado = 'aceptadas') {
+    const b = await exportTxtTipo(Number(campaniaId), estado)
+    descargarBlobDirecto(b, `tipo_${campaniaId}_${estado}.txt`)
+  }
+  async function onExportTxtClasif(estado = 'aceptadas') {
+    const b = await exportTxtClasif(Number(campaniaId), estado)
+    descargarBlobDirecto(b, `clasif_${campaniaId}_${estado}.txt`)
+  }
+
+  // TXT de selección (local, sin backend)
+  function onExportTxtSeleccion(campo) {
+    // campo: 'categoria' | 'tipo' | 'clasif'
+    const mapNew = {
+      categoria: 'new_categoria_cod',
+      tipo: 'new_tipo_cod',
+      clasif: 'new_clasif_cod',
+    }
+    const mapOld = {
+      categoria: 'old_categoria_cod',
+      tipo: 'old_tipo_cod',
+      clasif: 'old_clasif_cod',
+    }
+
+    const chosen = cola.filter(a => seleccion.includes(a.id))
+    const lines = []
+    for (const a of chosen) {
+      const newCode = a[mapNew[campo]]
+      const oldCode = a[mapOld[campo]]
+      if (!newCode) continue
+      // Opcional: evitar no-cambios
+      if (oldCode && String(oldCode) === String(newCode)) continue
+      lines.push(`${a.sku}\t${newCode}`)
+    }
+
+    const body = '\ufeff' + lines.join('\n') + (lines.length ? '\n' : '')
+    const blob = new Blob([body], { type: 'text/plain;charset=utf-8' })
+    descargarBlobDirecto(blob, `${campo}_seleccion_camp_${campaniaId}.txt`)
   }
 
   // Contadores rápidos (pendientes / aceptadas / rechazadas)
@@ -99,7 +178,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       else acc.aceptadas++ // 'pendiente' o 'aplicada'
     }
     return acc
-  }, { pendientes:0, aceptadas:0, rechazadas:0 })
+  }, { pendientes: 0, aceptadas: 0, rechazadas: 0 })
 
   // Aplica filtro de decisión a las propuestas
   function filtrarPropuestas(p) {
@@ -122,18 +201,18 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           </div>
           <div className="col-md-3">
             <Form.Label>SKU (contiene)</Form.Label>
-            <Form.Control value={sku} onChange={e=>setSku(e.target.value)} placeholder="ABC" />
+            <Form.Control value={sku} onChange={e => setSku(e.target.value)} placeholder="ABC" />
           </div>
           <div className="col-md-2">
             <Form.Label>Consenso</Form.Label>
-            <Form.Select value={consenso} onChange={e=>setConsenso(e.target.value)}>
+            <Form.Select value={consenso} onChange={e => setConsenso(e.target.value)}>
               <option value="">Todos</option>
               <option value="true">Sólo con consenso</option>
               <option value="false">Sólo sin consenso</option>
             </Form.Select>
           </div>
           <div className="col-md-2 d-flex align-items-end">
-            <Form.Check type="switch" id="solo-dif" label="Sólo diferencias" checked={soloDif} onChange={e=>setSoloDif(e.target.checked)} />
+            <Form.Check type="switch" id="solo-dif" label="Sólo diferencias" checked={soloDif} onChange={e => setSoloDif(e.target.checked)} />
           </div>
           <div className="col-md-2 d-flex align-items-end">
             <Button onClick={cargar} disabled={!authOK} className="w-100">Buscar</Button>
@@ -141,25 +220,25 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
         </Card.Body>
       </Card>
 
-      {/* Filtro por estado de decisión */}
+      {/* Filtro por estado de decisión (propuestas) */}
       <div className="d-flex justify-content-between align-items-center mb-2">
         <ButtonGroup>
-          <Button variant={filtroDecision==='pendientes' ? 'primary' : 'outline-primary'} onClick={()=>setFiltroDecision('pendientes')}>
+          <Button variant={filtroDecision === 'pendientes' ? 'primary' : 'outline-primary'} onClick={() => setFiltroDecision('pendientes')}>
             Pendientes ({contadores.pendientes})
           </Button>
-          <Button variant={filtroDecision==='aceptadas' ? 'success' : 'outline-success'} onClick={()=>setFiltroDecision('aceptadas')}>
+          <Button variant={filtroDecision === 'aceptadas' ? 'success' : 'outline-success'} onClick={() => setFiltroDecision('aceptadas')}>
             Aceptadas ({contadores.aceptadas})
           </Button>
-          <Button variant={filtroDecision==='rechazadas' ? 'danger' : 'outline-danger'} onClick={()=>setFiltroDecision('rechazadas')}>
+          <Button variant={filtroDecision === 'rechazadas' ? 'danger' : 'outline-danger'} onClick={() => setFiltroDecision('rechazadas')}>
             Rechazadas ({contadores.rechazadas})
           </Button>
-          <Button variant={filtroDecision==='todas' ? 'secondary' : 'outline-secondary'} onClick={()=>setFiltroDecision('todas')}>
+          <Button variant={filtroDecision === 'todas' ? 'secondary' : 'outline-secondary'} onClick={() => setFiltroDecision('todas')}>
             Todas
           </Button>
         </ButtonGroup>
 
         <div className="d-flex gap-2">
-          <Button variant="outline-dark" onClick={() => { setMostrarCola(true); setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 50) }}>
+          <Button variant="outline-dark" onClick={() => { setMostrarCola(true); setTimeout(() => colaRef.current?.scrollIntoView({ behavior: 'smooth' }), 50) }}>
             Ir a cola de actualizaciones
           </Button>
         </div>
@@ -170,7 +249,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
         const propsFiltradas = it.propuestas.filter(filtrarPropuestas)
         if (!propsFiltradas.length) return null
 
-        // Color de borde por consenso
         const borde = it.hayConsenso ? 'border-success' : 'border-warning'
         const bordeWidth = 'border-start border-4'
 
@@ -179,7 +257,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
             <Card.Header className="d-flex justify-content-between align-items-center">
               <div className="d-flex align-items-center gap-3">
                 <strong>{it.sku}</strong>
-                {it.hayConsenso && <Badge bg="success">Consenso {Math.round(it.consensoPct*100)}%</Badge>}
+                {it.hayConsenso && <Badge bg="success">Consenso {Math.round(it.consensoPct * 100)}%</Badge>}
                 {!it.hayConsenso && <Badge bg="warning" text="dark">Sin consenso</Badge>}
               </div>
               <small className="text-muted">{it.totalVotos} votos</small>
@@ -218,11 +296,24 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                           {/* Acciones / Estado */}
                           <div className="d-flex align-items-center gap-3">
                             {p.decision ? (
-                              <div>{badgeDecision(p.decision.estado)}</div>
+                              <div className="d-flex align-items-center gap-2">
+                                <div>{badgeDecision(p.decision.estado)}</div>
+                                {p.decision.estado !== 'aplicada' && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline-secondary"
+                                    onClick={() => onUndoDecision(p.decision.id)}
+                                    disabled={!authOK}
+                                    title="Deshacer esta decisión"
+                                  >
+                                    Deshacer
+                                  </Button>
+                                )}
+                              </div>
                             ) : (
                               <>
-                                <Button variant="outline-danger" size="sm" onClick={()=>onRechazar(it.sku, p)} disabled={!authOK}>Rechazar</Button>
-                                <Button variant="success" size="sm" onClick={()=>onAceptar(it.sku, p)} disabled={!authOK}>Aceptar</Button>
+                                <Button variant="outline-danger" size="sm" onClick={() => onRechazar(it.sku, p)} disabled={!authOK}>Rechazar</Button>
+                                <Button variant="success" size="sm" onClick={() => onAceptar(it.sku, p)} disabled={!authOK}>Aceptar</Button>
                               </>
                             )}
                           </div>
@@ -249,11 +340,36 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       <Card className="mt-4">
         <Card.Header className="d-flex justify-content-between align-items-center">
           <span>Cola de actualizaciones</span>
-          <div className="d-flex gap-2">
-            <Button variant={mostrarCola ? 'outline-secondary' : 'secondary'} onClick={()=>setMostrarCola(v=>!v)}>
+          <div className="d-flex gap-2 flex-wrap">
+            <Form.Select
+              size="sm"
+              value={filtroEstadoCola}
+              onChange={(e) => setFiltroEstadoCola(e.target.value)}
+              title="Estado en cola"
+              style={{ minWidth: 180 }}
+            >
+              <option value="">Cola: Todos</option>
+              <option value="pendiente">Cola: Pendientes</option>
+              <option value="aplicada">Cola: Aplicadas</option>
+              <option value="rechazada">Cola: Rechazadas</option>
+            </Form.Select>
+
+            <Button variant={mostrarCola ? 'outline-secondary' : 'secondary'} onClick={() => setMostrarCola(v => !v)}>
               {mostrarCola ? 'Ocultar' : 'Mostrar'}
             </Button>
-            <Button variant="outline-secondary" onClick={onExportCola} disabled={!authOK}>Exportar pendientes (CSV)</Button>
+
+            {/* TXT globales (backend) */}
+            <Button variant="outline-dark" onClick={() => onExportTxtCat('aceptadas')} disabled={!authOK}>TXT Cat (aceptadas)</Button>
+            <Button variant="outline-dark" onClick={() => onExportTxtTipo('aceptadas')} disabled={!authOK}>TXT Tipo (aceptadas)</Button>
+            <Button variant="outline-dark" onClick={() => onExportTxtClasif('aceptadas')} disabled={!authOK}>TXT Clasif (aceptadas)</Button>
+
+            {/* TXT por selección (local) */}
+            <Button variant="dark" onClick={() => onExportTxtSeleccion('categoria')} disabled={!authOK || !seleccion.length}>TXT Cat (selección)</Button>
+            <Button variant="dark" onClick={() => onExportTxtSeleccion('tipo')} disabled={!authOK || !seleccion.length}>TXT Tipo (selección)</Button>
+            <Button variant="dark" onClick={() => onExportTxtSeleccion('clasif')} disabled={!authOK || !seleccion.length}>TXT Clasif (selección)</Button>
+
+            {/* CSV y aplicar */}
+            <Button variant="outline-secondary" onClick={onExportCola} disabled={!authOK}>CSV pendientes</Button>
             <Button variant="primary" onClick={onAplicarSeleccion} disabled={!authOK || !seleccion.length}>Aplicar seleccionadas</Button>
           </div>
         </Card.Header>
@@ -265,23 +381,30 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 <thead>
                   <tr>
                     <th></th>
-                    <th>Estado</th><th>SKU</th>
+                    <th>Estado</th>
+                    <th>SKU</th>
                     <th>Old Cat</th><th>New Cat</th>
                     <th>Old Tipo</th><th>New Tipo</th>
                     <th>Old Clasif</th><th>New Clasif</th>
                     <th>Decidido por</th><th>Decidido en</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {cola.map(a => {
                     const rowClass =
                       a.estado === 'aplicada' ? 'table-success' :
-                      a.estado === 'pendiente' ? 'table-warning' :
-                      a.estado === 'rechazada' ? 'table-danger' : ''
+                        a.estado === 'pendiente' ? 'table-warning' :
+                          a.estado === 'rechazada' ? 'table-danger' : ''
                     return (
                       <tr key={a.id} className={rowClass}>
                         <td>
-                          <Form.Check type="checkbox" disabled={a.estado!=='pendiente'} checked={seleccion.includes(a.id)} onChange={()=>toggleSel(a.id)} />
+                          {/* permitir seleccionar cualquier estado para TXT de selección */}
+                          <Form.Check
+                            type="checkbox"
+                            checked={seleccion.includes(a.id)}
+                            onChange={() => toggleSel(a.id)}
+                          />
                         </td>
                         <td>{badgeDecision(a.estado)}</td>
                         <td>{a.sku}</td>
@@ -293,6 +416,29 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                         <td>{etiqueta(dic?.clasif, a.new_clasif_cod)}</td>
                         <td>{a.decidedBy || '—'}</td>
                         <td>{a.decidedAt ? new Date(a.decidedAt).toLocaleString() : '—'}</td>
+                        <td>
+                          {a.estado !== 'aplicada' ? (
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              onClick={() => onUndoRow(a.id)}
+                              disabled={!authOK}
+                              title="Deshacer (eliminar esta decisión)"
+                            >
+                              Deshacer
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline-warning"
+                              onClick={() => onRevertRow(a.id)}
+                              disabled={!authOK}
+                              title="Revertir aplicada (crea una pendiente inversa)"
+                            >
+                              Revertir
+                            </Button>
+                          )}
+                        </td>
                       </tr>
                     )
                   })}
