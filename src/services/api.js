@@ -44,6 +44,16 @@ export async function getMasterBySku(sku) {
   }
 }
 
+export async function getMaestroList({ q = '', page = 1, pageSize = 50 } = {}) {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  params.set('page', String(page))
+  params.set('pageSize', String(pageSize))
+  const res = await fetch(`/api/maestro?${params}`)
+  if (!res.ok) throw new Error(`Error ${res.status}`)
+  return res.json() // { items, total, page, pageSize }
+}
+
 // Escaneos
 // Nota: el backend responde {estado, maestro, asumidos}.
 // Para no tocar tu UI, devolvemos { ok: true, ...data }.

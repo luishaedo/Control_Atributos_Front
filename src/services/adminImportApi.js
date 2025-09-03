@@ -1,0 +1,36 @@
+import { adminGetToken } from './adminApi'
+
+function authHeader() {
+  const t = localStorage.getItem('cc_admin_token') || ''
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
+
+export async function uploadDiccionarios({ categorias, tipos, clasif }) {
+  const fd = new FormData()
+  if (categorias) fd.append('categorias', categorias)
+  if (tipos) fd.append('tipos', tipos)
+  if (clasif) fd.append('clasif', clasif)
+
+  const res = await fetch('/api/admin/diccionarios/import-file', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${adminGetToken()}` },
+    body: fd,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(`Error ${res.status}`)
+  return data
+}
+
+export async function uploadMaestro({ maestro }) {
+  const fd = new FormData()
+  fd.append('maestro', maestro)
+
+  const res = await fetch('/api/admin/maestro/import-file', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${adminGetToken()}` },
+    body: fd,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data?.error || `Error ${res.status}`)
+  return data
+}

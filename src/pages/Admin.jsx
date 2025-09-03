@@ -1,4 +1,4 @@
-
+import { useNavigate } from 'react-router-dom'
 import React, { useEffect, useState } from 'react'
 import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Badge } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
@@ -12,6 +12,8 @@ import {
   getDiscrepancias, getDiscrepanciasSucursales, exportDiscrepanciasCSV,
   exportMaestroCSV, exportCategoriasCSV, exportTiposCSV, exportClasifCSV
 } from '../services/adminApi.js'
+import { uploadDiccionarios, uploadMaestro } from '../services/adminImportApi.js'
+
 
 export default function Admin() {
   const [user] = useState({ email: 'admin@local', sucursal: 'Admin' })
@@ -19,7 +21,9 @@ export default function Admin() {
   const [token, setToken] = useState(adminGetToken())
   const [authOK, setAuthOK] = useState(false)
   const [error, setError] = useState(null)
-
+const [filesDic, setFilesDic] = useState({ categorias: null, tipos: null, clasif: null })
+const [fileMae, setFileMae] = useState(null)
+const [importMsg, setImportMsg] = useState('')
   const [dic, setDic] = useState(null)
 
   const [dicEjemplo, setDicEjemplo] = useState(JSON.stringify({
@@ -36,7 +40,7 @@ export default function Admin() {
     nombre: '', inicia: '', termina: '',
     categoria_objetivo_cod: '', tipo_objetivo_cod: '', clasif_objetivo_cod: ''
   })
-
+const navigate = useNavigate()
   const [campaniaIdAud, setCampaniaIdAud] = useState('')
   const [discrepancias, setDiscrepancias] = useState([])
   const [discrepSuc, setDiscrepSuc] = useState([])
@@ -49,6 +53,26 @@ export default function Admin() {
     cargarCampanias()
     getDictionaries().then(setDic).catch(() => {})
   }, [])
+
+  async function importarDicPorArchivo() {
+  try {
+    setError(null); setImportMsg('')
+    const r = await uploadDiccionarios(filesDic)
+    setImportMsg(`Diccionarios OK → categorías=${r.categorias}, tipos=${r.tipos}, clasif=${r.clasif}`)
+    getDictionaries().then(setDic).catch(()=>{})
+  } catch (e) {
+    setError(e.message || 'Error importando diccionarios (archivo)')
+  }
+}
+async function importarMaePorArchivo() {
+  try {
+    setError(null); setImportMsg('')
+    const r = await uploadMaestro({ maestro: fileMae })
+    setImportMsg(`Maestro OK → ${r.count} items`)
+  } catch (e) {
+    setError(e.message || 'Error importando maestro (archivo)')
+  }
+}
 
   async function cargarCampanias() {
     try {
@@ -214,12 +238,85 @@ export default function Admin() {
             {error && <Alert variant="danger" className="mt-2">{error}</Alert>}
           </Card.Body>
         </Card>
-
+        <div className="d-flex justify-content-end mb-2">
+  <button className="btn btn-outline-primary" onClick={() => navigate('/auditoria')}>
+    Auditoría
+  </button>
+</div>
         <Tabs defaultActiveKey="import" className="mb-3">
           <Tab eventKey="import" title="Maestro & Diccionarios">
+            <Card className="mb-3">
+  <Card.Header>Importar por Archivo (CSV)</Card.Header>
+  <Card.Body>
+    <Row className="g-3">
+      <Col md={6}>
+        <div className="mb-2 fw-semibold">Diccionarios</div>
+
+        <Form.Group className="mb-2">
+          <Form.Label>Categorías (CSV)</Form.Label>
+          <Form.Control
+            type="file"
+            accept=".csv"
+            onChange={e => setFilesDic(s => ({ ...s, categorias: e.target.files?.[0] || null }))}
+          />
+        </Form.Group>
+
+        <Form.Group className="mb-2">
+          <Form.Label>Tipos (CSV)</Form.Label>
+          <Form.Control
+            type="file"
+            accept=".csv"
+            onChange={e => setFilesDic(s => ({ ...s, tipos: e.target.files?.[0] || null }))}
+          />
+        </Form.Group>
+
+        <Form.Group className="mb-3">
+          <Form.Label>Clasificaciones (CSV)</Form.Label>
+          <Form.Control
+            type="file"
+            accept=".csv"
+            onChange={e => setFilesDic(s => ({ ...s, clasif: e.target.files?.[0] || null }))}
+          />
+        </Form.Group>
+
+        <Button onClick={importarDicPorArchivo} disabled={!authOK}>
+          Subir diccionarios
+        </Button>
+      </Col>
+
+      <Col md={6}>
+        <div className="mb-2 fw-semibold">Maestro</div>
+
+        <Form.Group className="mb-3">
+          <Form.Label>Archivo maestro (CSV)</Form.Label>
+          <Form.Control
+            type="file"
+            accept=".csv"
+            onChange={e => setFileMae(e.target.files?.[0] || null)}
+          />
+        </Form.Group>
+
+        <Button onClick={importarMaePorArchivo} disabled={!authOK}>
+          Subir maestro
+        </Button>
+      </Col>
+    </Row>
+
+    {importMsg && <Alert variant="success" className="mt-3">{importMsg}</Alert>}
+
+    <div className="mt-3 small text-muted">
+      <div>Encabezados esperados:</div>
+      <ul className="mb-0">
+        <li>Diccionarios: <code>Código,Descripción</code></li>
+        <li>Maestro: <code>Código,Descripción,Categoría,Tipo,Clasificación</code></li>
+      </ul>
+      <div>Los códigos 1..9 se normalizan automáticamente a 2 dígitos (01..09).</div>
+    </div>
+  </Card.Body>
+</Card>
             <Row>
               <Col md={6}>
-                <Card className="mb-3">
+              <Card className="mb-3">
                   <Card.Header>Importar Diccionarios (JSON)</Card.Header>
                   <Card.Body>
                     <Form.Group className="mb-2">
@@ -240,6 +337,27 @@ export default function Admin() {
                     </div>
                   </Card.Body>
                 </Card>
+                <Card className="mb-3">
+                  <Card.Header>Importar Diccionarios (JSON)</Card.Header>
+                  <Card.Body>
+                    <Form.Group className="mb-2">
+                      <Form.Label>Payload ejemplo</Form.Label>
+                      <Form.Control as="textarea" rows={10} value={dicEjemplo} onChange={e => setDicEjemplo(e.target.value)} />
+                    </Form.Group>
+                    <div className="d-flex gap-2 flex-wrap">
+                      <Button onClick={subirDiccionarios} disabled={!authOK}>Subir diccionarios</Button>
+                      <Button variant="outline-secondary" onClick={() => descargarBlob(exportCategoriasCSV, 'categorias.csv')} disabled={!authOK}>
+                        Descargar categorías (CSV)
+                      </Button>
+                      <Button variant="outline-secondary" onClick={() => descargarBlob(exportTiposCSV, 'tipos.csv')} disabled={!authOK}>
+                        Descargar tipos (CSV)
+                      </Button>
+                      <Button variant="outline-secondary" onClick={() => descargarBlob(exportClasifCSV, 'clasif.csv')} disabled={!authOK}>
+                        Descargar clasif (CSV)
+                      </Button>
+                    </div>
+                  </Card.Body>
+                </Card> 
               </Col>
 
               <Col md={6}>
@@ -328,79 +446,7 @@ export default function Admin() {
               </Col>
             </Row>
           </Tab>
-
-          <Tab eventKey="auditoria" title="Auditoría">
-            <Card className="mb-3">
-              <Card.Body className="row g-2">
-                <div className="col-md-4">
-                  <Form.Label>Campaña</Form.Label>
-                  <Form.Select value={campaniaIdAud} onChange={e => setCampaniaIdAud(e.target.value)}>
-                    {campanias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                  </Form.Select>
-                </div>
-                <div className="col-md-8 d-flex align-items-end gap-2">
-                  <Button onClick={cargarDiscrepancias} disabled={!authOK}>Ver discrepancias vs Maestro</Button>
-                  <Button onClick={cargarDiscrepSuc} disabled={!authOK}>Entre sucursales</Button>
-                  <Button variant="outline-primary" onClick={bajarCSVDiscrepancias} disabled={!authOK}>Exportar CSV</Button>
-                </div>
-              </Card.Body>
-            </Card>
-
-            <h6 className="mt-3">Discrepancias vs Maestro</h6>
-            <Table striped bordered size="sm">
-              <thead>
-                <tr>
-                  <th>SKU</th><th>Sucursal</th><th>Email</th><th>Estado</th>
-                  <th>Cat M</th><th>Cat A</th>
-                  <th>Tipo M</th><th>Tipo A</th>
-                  <th>Clasif M</th><th>Clasif A</th>
-                </tr>
-              </thead>
-              <tbody>
-                {discrepancias.map((d,i) => {
-                  const rowClass =
-                    d.estado === 'REVISAR' ? 'table-warning' :
-                    d.estado === 'NO_MAESTRO' ? 'table-danger' : ''
-                  return (
-                    <tr key={i} className={rowClass}>
-                      <td>{d.sku}</td>
-                      <td>{d.sucursal || '—'}</td>
-                      <td>{d.email || '—'}</td>
-                      <td><BadgeEstado estado={d.estado} /></td>
-                      <td>{etiqueta(dic?.categorias, d.maestro?.categoria_cod)}</td>
-                      <td>{etiqueta(dic?.categorias, d.asumidos?.categoria_cod)}</td>
-                      <td>{etiqueta(dic?.tipos, d.maestro?.tipo_cod)}</td>
-                      <td>{etiqueta(dic?.tipos, d.asumidos?.tipo_cod)}</td>
-                      <td>{etiqueta(dic?.clasif, d.maestro?.clasif_cod)}</td>
-                      <td>{etiqueta(dic?.clasif, d.asumidos?.clasif_cod)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </Table>
-
-            <h6 className="mt-4">Discrepancias entre sucursales</h6>
-            <Table striped bordered size="sm">
-              <thead>
-                <tr>
-                  <th>SKU</th><th>Cat distintos</th><th>Tipo distintos</th><th>Clasif distintos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {discrepSuc.map((r,i) => (
-                  <tr key={i}>
-                    <td>{r.sku}</td>
-                    <td>{etiquetas(dic?.categorias, r.categorias)}</td>
-                    <td>{etiquetas(dic?.tipos, r.tipos)}</td>
-                    <td>{etiquetas(dic?.clasif, r.clasif)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          </Tab>
-
-          {/* Nueva pestaña: Revisiones con filtros y cola */}
-          <Tab eventKey="revisiones" title="Revisiones">
+           <Tab eventKey="revisiones" title="Revisiones">
             <Revisiones
               campanias={campanias}
               campaniaIdDefault={(campanias.find(c=>c.activa)?.id || campanias[0]?.id)}
