@@ -1,9 +1,9 @@
-import { adminGetToken } from './adminApi'
+const API_BASE = (import.meta.env?.VITE_API_URL?.replace(/\/$/, '')) || 'http://localhost:4000';
 
-function authHeader() {
-  const t = localStorage.getItem('cc_admin_token') || ''
-  return t ? { Authorization: `Bearer ${t}` } : {}
-}
+ function authHeader() {
+   const t = localStorage.getItem('cc_admin_token') || ''
+   return t ? { Authorization: `Bearer ${t}` } : {}
+ }
 
 export async function uploadDiccionarios({ categorias, tipos, clasif }) {
   const fd = new FormData()
@@ -11,7 +11,7 @@ export async function uploadDiccionarios({ categorias, tipos, clasif }) {
   if (tipos) fd.append('tipos', tipos)
   if (clasif) fd.append('clasif', clasif)
 
-  const res = await fetch('/api/admin/diccionarios/import-file', {
+  const res = await fetch(`${API_BASE}/api/admin/diccionarios/import-file`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${adminGetToken()}` },
     body: fd,
@@ -25,7 +25,7 @@ export async function uploadMaestro({ maestro }) {
   const fd = new FormData()
   fd.append('maestro', maestro)
 
-  const res = await fetch('/api/admin/maestro/import-file', {
+  const res = await fetch(`${API_BASE}/api/admin/maestro/import-file`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${adminGetToken()}` },
     body: fd,

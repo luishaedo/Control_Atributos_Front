@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Card, Button, ButtonGroup, Badge, Stack } from 'react-bootstrap'
-import { getCampaigns, setActiveCampaign, getDictionaries, getNombre } from '../services/api'
+import { getCampaigns, setActiveCampaign, getDictionaries, } from '../services/api'
+import { getNombre } from '../utils/texto.js'
 
 export default function CampaignSelector({ onSelect }) {
   const [listado, setListado] = useState([])

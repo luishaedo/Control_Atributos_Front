@@ -1,0 +1,3 @@
+export function getNombre(obj) {
+  return obj?.nombre ?? obj?.name ?? obj?.titulo ?? obj?.title ?? '';
+}

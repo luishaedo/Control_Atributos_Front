@@ -1,6 +1,6 @@
 import React from 'react'
 import { Row, Col, Form } from 'react-bootstrap'
-import { getNombre } from '../services/api'
+import { getNombre } from '../utils/texto.js'
 
 export default function SuggestionForm({ dic, estado, sugeridos, onChange, maestro }) {
   if (!dic) return null
