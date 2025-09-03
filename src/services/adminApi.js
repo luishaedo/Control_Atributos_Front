@@ -12,13 +12,10 @@ function authHeaders(extra = {}) {
   return t ? { ...extra, Authorization: `Bearer ${t}` } : { ...extra };
 }
 
-// ===== Fetch helper genérico =====
-// Devuelve la Response (usá .json() o .blob() según corresponda)
+// ===== Fetch helpers =====
 async function fetchAuth(path, options = {}) {
   const headers = authHeaders(options.headers || {});
-  // Si mandamos body y no indicaron Content-Type, ponemos JSON por defecto
   if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-
   const resp = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
@@ -26,8 +23,6 @@ async function fetchAuth(path, options = {}) {
   }
   return resp;
 }
-
-// Helpers específicos
 async function fetchAuthJSON(path, options) {
   const r = await fetchAuth(path, options);
   return r.json();
@@ -85,6 +80,10 @@ export function exportDiscrepanciasCSV(campaniaId) {
   const qs = new URLSearchParams({ campaniaId }).toString();
   return fetchAuthBlob(`/api/admin/export/discrepancias.csv?${qs}`);
 }
+export function exportDiscrepanciasSucursalesCSV(campaniaId) {
+  const qs = new URLSearchParams({ campaniaId }).toString()
+  return fetchAuthBlob(`/api/admin/export/discrepancias-sucursales.csv?${qs}`)
+}
 
 // =======================
 // Revisiones
@@ -93,7 +92,6 @@ export function getRevisiones(params) {
   const qs = new URLSearchParams(params || {}).toString();
   return fetchAuthJSON(`/api/admin/revisiones?${qs}`);
 }
-
 export function decidirRevision(body) {
   return fetchAuthJSON('/api/admin/revisiones/decidir', {
     method: 'POST',
@@ -104,18 +102,17 @@ export function decidirRevision(body) {
 // =======================
 // Actualizaciones (cola)
 // =======================
-// 2º parámetro puede ser string 'pendiente' | 'aplicada' | 'rechazada' o un objeto { estado, archivada }
+// opts: string 'pendiente'|'aplicada'|'rechazada' o { estado, archivada }
+// archivada: 'true' | 'false' | 'todas'
 export function listarActualizaciones(campaniaId, opts = undefined) {
   const qs = new URLSearchParams({ campaniaId });
-
   if (typeof opts === 'string') {
     if (opts) qs.set('estado', opts);
   } else if (opts && typeof opts === 'object') {
     const { estado, archivada } = opts;
-    if (estado) qs.set('estado', estado);           // 'pendiente' | 'aplicada' | 'rechazada'
-    if (archivada) qs.set('archivada', archivada);  // 'true' | 'false' | 'todas'
+    if (estado) qs.set('estado', estado);
+    if (archivada) qs.set('archivada', archivada);
   }
-
   return fetchAuthJSON(`/api/admin/actualizaciones?${qs.toString()}`);
 }
 
@@ -131,7 +128,7 @@ export function aplicarActualizaciones(ids, decidedBy = '') {
   });
 }
 
-// Archivar / desarchivar (usado por UI y como "undo" temporal)
+// Archivar / desarchivar
 export function archivarActualizaciones(ids, archivada = true, archivadaBy = '') {
   return fetchAuthJSON('/api/admin/actualizaciones/archivar', {
     method: 'POST',
@@ -140,26 +137,10 @@ export function archivarActualizaciones(ids, archivada = true, archivadaBy = '')
 }
 
 // =======================
-// Exports CSV (dic/maestro)
-// =======================
-export function exportMaestroCSV() {
-  return fetchAuthBlob('/api/admin/export/maestro.csv');
-}
-export function exportCategoriasCSV() {
-  return fetchAuthBlob('/api/admin/export/categorias.csv');
-}
-export function exportTiposCSV() {
-  return fetchAuthBlob('/api/admin/export/tipos.csv');
-}
-export function exportClasifCSV() {
-  return fetchAuthBlob('/api/admin/export/clasif.csv');
-}
-
-// =======================
 // Exports TXT por campo
 // =======================
 // estado: 'aceptadas' (pendiente+aplicada) | 'aplicada'
-// incluirArchivadas (bool) si querés traer también archivadas
+// incluirArchivadas (bool) si el backend lo soporta
 export function exportTxtCategoria(campaniaId, estado = 'aceptadas', incluirArchivadas = false) {
   const qs = new URLSearchParams({ campaniaId, estado });
   if (incluirArchivadas) qs.set('incluirArchivadas', 'true');
@@ -177,12 +158,31 @@ export function exportTxtClasif(campaniaId, estado = 'aceptadas', incluirArchiva
 }
 
 // =======================
-// Undo / Revert (provisorio => archivar)
+// Undo / Revert (endpoints reales)
 // =======================
-// Si todavía no tenés endpoints /undo y /revertir en el backend, usamos archivar como "deshacer".
 export function undoActualizacion(id) {
-  return archivarActualizaciones([id], true, 'undo-ui');
+  return fetchAuthJSON('/api/admin/actualizaciones/undo', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
 }
 export function revertirActualizacion(id) {
-  return archivarActualizaciones([id], true, 'revert-ui');
+  return fetchAuthJSON('/api/admin/actualizaciones/revertir', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
+// --- Exports CSV (Maestro y Diccionarios)
+export function exportMaestroCSV() {
+  return fetchAuthBlob('/api/admin/export/maestro.csv');
+}
+export function exportCategoriasCSV() {
+  return fetchAuthBlob('/api/admin/export/categorias.csv');
+}
+export function exportTiposCSV() {
+  return fetchAuthBlob('/api/admin/export/tipos.csv');
+}
+export function exportClasifCSV() {
+  return fetchAuthBlob('/api/admin/export/clasif.csv');
 }
