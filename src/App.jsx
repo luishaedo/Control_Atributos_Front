@@ -2,6 +2,7 @@ import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home.jsx'
 import Admin from './pages/Admin.jsx'
+import AuditoriaPage from './pages/AuditoriaPage.jsx'
 
 export default function App() {
   return (
@@ -9,6 +10,8 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/admin" element={<Admin />} />
       <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/auditoria" element={<AuditoriaPage />} />
+
     </Routes>
   )
 }

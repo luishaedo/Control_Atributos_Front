@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import DiscrepanciasTabla from '../components/auditoria/DiscrepanciasTabla'
-import DiscrepanciasSucursalesTabla from '../components/auditoria/DiscrepanciasSucursalesTabla'
+import DiscrepanciasTabla from '../components/DiscrepanciasTabla'
+import DiscrepanciasSucursalesTabla from '../components/DiscrepanciasSucursalesTabla'
 import { apiGetDiscrepancias, apiGetDiscrepanciasSucursales } from '../api/auditoria'
 
 export default function AuditoriaPage({ adminToken = '' }) {
