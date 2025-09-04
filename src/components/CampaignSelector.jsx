@@ -76,7 +76,7 @@ export default function CampaignSelector({ onSelect }) {
                 onClick={() => activar(c.id)}
                 disabled={loading}
               >
-                {c.nombre}
+                 {c.nombre} {c.activa ? <Badge bg="light" text="dark">Activa</Badge> : null}
               </Button>
             ))}
           </ButtonGroup>

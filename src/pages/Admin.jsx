@@ -337,27 +337,7 @@ async function importarMaePorArchivo() {
                     </div>
                   </Card.Body>
                 </Card>
-                <Card className="mb-3">
-                  <Card.Header>Importar Diccionarios (JSON)</Card.Header>
-                  <Card.Body>
-                    <Form.Group className="mb-2">
-                      <Form.Label>Payload ejemplo</Form.Label>
-                      <Form.Control as="textarea" rows={10} value={dicEjemplo} onChange={e => setDicEjemplo(e.target.value)} />
-                    </Form.Group>
-                    <div className="d-flex gap-2 flex-wrap">
-                      <Button onClick={subirDiccionarios} disabled={!authOK}>Subir diccionarios</Button>
-                      <Button variant="outline-secondary" onClick={() => descargarBlob(exportCategoriasCSV, 'categorias.csv')} disabled={!authOK}>
-                        Descargar categorías (CSV)
-                      </Button>
-                      <Button variant="outline-secondary" onClick={() => descargarBlob(exportTiposCSV, 'tipos.csv')} disabled={!authOK}>
-                        Descargar tipos (CSV)
-                      </Button>
-                      <Button variant="outline-secondary" onClick={() => descargarBlob(exportClasifCSV, 'clasif.csv')} disabled={!authOK}>
-                        Descargar clasif (CSV)
-                      </Button>
-                    </div>
-                  </Card.Body>
-                </Card> 
+                
               </Col>
 
               <Col md={6}>

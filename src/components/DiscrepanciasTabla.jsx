@@ -6,7 +6,7 @@ export default function DiscrepanciasTabla({ data = [], loading, onExportCSV }) 
   const [soloConflicto, setSoloConflicto] = useState(false)
 
   const rows = useMemo(() => {
-    let r = data
+    let r = data || []
     if (buscar) r = r.filter(x => String(x.sku).toUpperCase().includes(buscar.trim().toUpperCase()))
     if (soloConflicto) r = r.filter(x => {
       const m = x.maestro
@@ -16,6 +16,10 @@ export default function DiscrepanciasTabla({ data = [], loading, onExportCSV }) 
     })
     return r
   }, [data, buscar, soloConflicto])
+
+  if (!loading && (!rows || rows.length === 0)) {
+    return <EmptyState title="Sin discrepancias" subtitle="No hay diferencias con el maestro para los filtros dados." />
+  }
 
   return (
     <div className="card">
@@ -52,17 +56,14 @@ export default function DiscrepanciasTabla({ data = [], loading, onExportCSV }) 
                   <td><MaestroPill maestro={it.maestro} /></td>
                   <td><DiffPill maestro={it.maestro} propuesta={top} /></td>
                   <td style={{ minWidth: 160 }}>
-                    <ConsensusBar value={top?.count||0} total={it.totalEscaneos||0}/>
+                    <ConsensusBar value={it.consensoVotos || 0} total={it.totalVotos || 0} />
                   </td>
-                  <td>{top?.count || 0} / {it.totalEscaneos || 0}</td>
-                  <td><MiniChips items={it.sucursales} max={4} emptyLabel="—"/></td>
-                  <td>{fmtDate(it.ultimoTs)}</td>
+                  <td>{it.totalVotos || 0}</td>
+                  <td><MiniChips items={it.sucursales || []} emptyLabel="—" /></td>
+                  <td>{fmtDate(it.updatedAt || it.createdAt)}</td>
                 </tr>
               )
             })}
-            {!loading && !rows.length && (
-              <tr><td colSpan={7}><EmptyState/></td></tr>
-            )}
           </tbody>
         </table>
       </div>

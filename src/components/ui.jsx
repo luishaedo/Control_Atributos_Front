@@ -1,7 +1,7 @@
+// src/components/ui.jsx
 import React from 'react'
 
 export function DiffPill({ maestro, propuesta }) {
-  // determina dónde hay diferencias y pinta badges
   const difCat = (maestro?.categoria_cod || '') !== (propuesta?.categoria_cod || '')
   const difTip = (maestro?.tipo_cod || '') !== (propuesta?.tipo_cod || '')
   const difCla = (maestro?.clasif_cod || '') !== (propuesta?.clasif_cod || '')
@@ -44,23 +44,25 @@ export function MiniChips({ items = [], max = 3, emptyLabel = '—' }) {
   const extra = items.length - max
   return (
     <div className="d-flex flex-wrap gap-1">
-      {items.slice(0, max).map((s, i) => (
-        <span key={i} className="badge rounded-pill text-bg-light border">{s || '—'}</span>
-      ))}
-      {extra>0 && <span className="badge rounded-pill text-bg-light">+{extra}</span>}
+      {items.slice(0, max).map((s, i) => <span key={i} className="badge text-bg-light border">{String(s)}</span>)}
+      {extra > 0 && <span className="badge text-bg-secondary">+{extra}</span>}
     </div>
   )
 }
 
-export function EmptyState({ title = 'Sin resultados', hint = 'Ajustá filtros o intentá otro SKU' }) {
+export function fmtDate(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  const pad = (n) => String(n).padStart(2,'0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+export function EmptyState({ title = 'Sin datos', subtitle = 'No hay información para mostrar' }) {
   return (
-    <div className="text-center p-5 text-muted">
-      <div className="display-6 mb-2">🗂️</div>
+    <div className="text-center text-muted p-4">
+      <div className="display-6">🗂️</div>
       <div className="fw-semibold">{title}</div>
-      <div className="small">{hint}</div>
+      <div>{subtitle}</div>
     </div>
   )
 }
-
-// helpers
-export const fmtDate = (d) => d ? new Date(d).toLocaleString() : '—'
