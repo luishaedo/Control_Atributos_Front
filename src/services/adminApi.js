@@ -21,6 +21,26 @@ function authHeaders(extra = {}) {
   return t ? { ...extra, Authorization: `Bearer ${t}` } : { ...extra };
 }
 
+// ===== Guards y utilidades comunes
+function assertHasCampaignId(campaniaId, ctx = "operación") {
+  const n = Number(campaniaId);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`campaniaId requerido en frontend para ${ctx}`);
+  }
+  return String(n);
+}
+
+function qsFrom(obj) {
+  const qs = new URLSearchParams();
+  Object.entries(obj || {}).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === "") return;
+    qs.set(k, String(v));
+  });
+  return qs.toString();
+}
+
+
+
 // ===== Helpers fetch
 async function fetchAuth(path, options = {}) {
   const headers = authHeaders(options.headers || {});
@@ -71,20 +91,20 @@ export function crearCampania(data) {
 
 // ======================= Auditoría (Admin.jsx)
 export function getDiscrepancias(campaniaId) {
-  const qs = new URLSearchParams({ campaniaId: String(campaniaId) }).toString();
-  return fetchAuthJSON(`/api/admin/discrepancias?${qs}`);
+  const id = assertHasCampaignId(campaniaId, "getDiscrepancias");
+  return fetchAuthJSON(`/api/admin/discrepancias?${qsFrom({ campaniaId: id })}`);
 }
 export function getDiscrepanciasSucursales(campaniaId) {
-  const qs = new URLSearchParams({ campaniaId: String(campaniaId) }).toString();
-  return fetchAuthJSON(`/api/admin/discrepancias-sucursales?${qs}`);
+  const id = assertHasCampaignId(campaniaId, "getDiscrepanciasSucursales");
+  return fetchAuthJSON(`/api/admin/discrepancias-sucursales?${qsFrom({ campaniaId: id })}`);
 }
 export function exportDiscrepanciasCSV(campaniaId) {
-  const qs = new URLSearchParams({ campaniaId: String(campaniaId) }).toString();
-  return fetchAuthBlob(`/api/admin/export/discrepancias.csv?${qs}`);
+  const id = assertHasCampaignId(campaniaId, "exportDiscrepanciasCSV");
+  return fetchAuthBlob(`/api/admin/export/discrepancias.csv?${qsFrom({ campaniaId: id })}`);
 }
 export function exportDiscrepanciasSucursalesCSV(campaniaId) {
-  const qs = new URLSearchParams({ campaniaId: String(campaniaId) }).toString();
-  return fetchAuthBlob(`/api/admin/export/discrepancias-sucursales.csv?${qs}`);
+  const id = assertHasCampaignId(campaniaId, "exportDiscrepanciasSucursalesCSV");
+  return fetchAuthBlob(`/api/admin/export/discrepancias-sucursales.csv?${qsFrom({ campaniaId: id })}`);
 }
 // CSV globales que usa Admin.jsx
 export function exportMaestroCSV() {
@@ -101,25 +121,21 @@ export function exportClasifCSV() {
 }
 
 // ======================= Revisiones (tarjetas)
-export function getRevisiones(params = {}) {
-  //   const qs = new URLSearchParams(
-  //     Object.entries(params).filter(([_, v]) => v !== undefined && v !== "")
-  //   ).toString();
-  //   //return fetchAuthJSON(`/api/admin/revisiones?${qs}`);
-  //   return fetchAuthJSON(`/revisiones?${qs}`);
-  // }
-  // export function decidirRevision(body = {}) {
-  //   return fetchAuthJSON(`/api/admin/revisiones/decidir`, {
-  //     method: "POST",
-  //     body: JSON.stringify(body),
-  //   });
-  const qs = new URLSearchParams({ campaniaId: String(campaniaId) });
-  if (sku) qs.set("sku", String(sku).trim().toUpperCase());
-  if (consenso !== undefined && consenso !== null && consenso !== "")
-    qs.set("consenso", String(consenso));
-  if (soloConDiferencias !== undefined && soloConDiferencias !== null)
-    qs.set("soloConDiferencias", String(soloConDiferencias));
-  return fetchAuthJSON(`/api/admin/revisiones?${qs}`);
+export function getRevisiones({
+  campaniaId,
+  sku,
+  consenso,           
+  soloConDiferencias = true
+} = {}) {
+  const id = assertHasCampaignId(campaniaId, "getRevisiones");
+  const query = {
+    campaniaId: id,
+    
+    ...(sku ? { sku: String(sku).trim().toUpperCase() } : {}),
+    ...(consenso !== undefined && consenso !== "" ? { consenso: String(consenso) } : {}),
+    ...(soloConDiferencias !== undefined ? { soloConDiferencias: String(soloConDiferencias) } : {})
+  };
+  return fetchAuthJSON(`/api/admin/revisiones?${qsFrom(query)}`);
 }
 
 export async function decidirRevision({
@@ -128,37 +144,45 @@ export async function decidirRevision({
   propuesta,        // { categoria_cod?, tipo_cod?, clasif_cod? }
   decision,         // 'aceptar' | 'rechazar'
   aplicarAhora = false,
-  decidedBy,        // opcional: quién decide (string)
-  notas             // opcional
+  decidedBy,
+  notas
 }) {
+  const id = assertHasCampaignId(campaniaId, "decidirRevision");
+  if (!sku) throw new Error("sku requerido en frontend para decidirRevision");
+  if (!decision) throw new Error("decision requerida ('aceptar'|'rechazar')");
+
   const body = {
-    campaniaId: Number(campaniaId),
+    campaniaId: Number(id),
     sku: String(sku).trim().toUpperCase(),
     propuesta: propuesta || {},
     decision: String(decision),
     aplicarAhora: Boolean(aplicarAhora),
-    decidedBy,
-    notas
-  }
+    ...(decidedBy ? { decidedBy } : {}),
+    ...(notas ? { notas } : {})
+  };
   return fetchAuthJSON(`/api/admin/revisiones/decidir`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(body)
-  })
+  });
 }
 
 // ======================= Cola de actualizaciones
 // listar con filtros server-side
-export function listarActualizaciones(campaniaId, opts = undefined) {
-  const qs = new URLSearchParams({ campaniaId: String(campaniaId) });
+export function listarActualizaciones(campaniaId, opts) {
+  const id = assertHasCampaignId(campaniaId, "listarActualizaciones");
+  const query = { campaniaId: id };
+
   if (typeof opts === "string") {
-    if (opts) qs.set("estado", opts);
+    if (opts) query.estado = opts; // 'pendiente'|'aplicada'|'rechazada'
   } else if (opts && typeof opts === "object") {
     const { estado, archivada } = opts;
-    if (estado) qs.set("estado", estado); // 'pendiente'|'aplicada'|'rechazada'
-    if (archivada) qs.set("archivada", archivada); // 'true'|'false'|'todas'
+    if (estado) query.estado = estado;
+    if (archivada !== undefined && archivada !== "") query.archivada = String(archivada);
   }
-  return fetchAuthJSON(`/api/admin/actualizaciones?${qs.toString()}`);
+
+  return fetchAuthJSON(`/api/admin/actualizaciones?${qsFrom(query)}`);
 }
+
 export function aplicarActualizaciones(ids = [], decidedBy = "") {
   //return fetchAuthJSON(`/api/admin/actualizaciones/aplicar`, {
   return fetchAuthJSON(`/api/admin/actualizaciones/aplicar`, {
@@ -189,36 +213,28 @@ export function revertirActualizacion(id) {
   );
 }
 export function exportActualizacionesCSV(campaniaId) {
-  const qs = new URLSearchParams({ campaniaId: String(campaniaId) }).toString();
-  //return fetchAuthBlob(`/api/admin/export/actualizaciones.csv?${qs}`);
-  return fetchAuthBlob(`/api/admin/export/actualizaciones.csv?${qs}`)
+  const id = assertHasCampaignId(campaniaId, "exportActualizacionesCSV");
+  return fetchAuthBlob(`/api/admin/export/actualizaciones.csv?${qsFrom({ campaniaId: id })}`);
 }
 
 // ======================= Exports TXT (por campo)
-export function exportTxtCategoria(
-  campaniaId,
-  estado = "aceptadas",
-  incluirArchivadas = false
-) {
-  const qs = new URLSearchParams({ campaniaId: String(campaniaId), estado });
-  if (incluirArchivadas) qs.set("incluirArchivadas", "true");
-  return fetchAuthBlob(`/api/admin/export/txt/categoria?${qs.toString()}`);
+export function exportTxtCategoria(campaniaId, estado = "aceptadas", incluirArchivadas = false) {
+  const id = assertHasCampaignId(campaniaId, "exportTxtCategoria");
+  return fetchAuthBlob(`/api/admin/export/txt/categoria?${qsFrom({
+    campaniaId: id, estado, ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
+  })}`);
 }
-export function exportTxtTipo(
-  campaniaId,
-  estado = "aceptadas",
-  incluirArchivadas = false
-) {
-  const qs = new URLSearchParams({ campaniaId: String(campaniaId), estado });
-  if (incluirArchivadas) qs.set("incluirArchivadas", "true");
-  return fetchAuthBlob(`/api/admin/export/txt/tipo?${qs.toString()}`);
+
+export function exportTxtTipo(campaniaId, estado = "aceptadas", incluirArchivadas = false) {
+  const id = assertHasCampaignId(campaniaId, "exportTxtTipo");
+  return fetchAuthBlob(`/api/admin/export/txt/tipo?${qsFrom({
+    campaniaId: id, estado, ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
+  })}`);
 }
-export function exportTxtClasif(
-  campaniaId,
-  estado = "aceptadas",
-  incluirArchivadas = false
-) {
-  const qs = new URLSearchParams({ campaniaId: String(campaniaId), estado });
-  if (incluirArchivadas) qs.set("incluirArchivadas", "true");
-  return fetchAuthBlob(`/api/admin/export/txt/clasif?${qs.toString()}`);
+
+export function exportTxtClasif(campaniaId, estado = "aceptadas", incluirArchivadas = false) {
+  const id = assertHasCampaignId(campaniaId, "exportTxtClasif");
+  return fetchAuthBlob(`/api/admin/export/txt/clasif?${qsFrom({
+    campaniaId: id, estado, ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
+  })}`);
 }
