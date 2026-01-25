@@ -1,8 +1,19 @@
 // src/pages/Revisiones.jsx
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Card, Button, Row, Col, Form, Badge, Stack, Table,
-  Dropdown, ButtonGroup, Tabs, Tab
+  Alert,
+  Card,
+  Button,
+  Row,
+  Col,
+  Form,
+  Badge,
+  Stack,
+  Table,
+  Dropdown,
+  ButtonGroup,
+  Tabs,
+  Tab
 } from 'react-bootstrap'
 import { getDictionaries } from '../services/api'
 import { pad2 } from '../utils/sku'
@@ -41,6 +52,8 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Estado general =====
   const [activeTab, setActiveTab] = useState('revisiones')
   const [dic, setDic] = useState(null)
+  const [uiMessage, setUiMessage] = useState(null)
+  const messageTimeoutRef = useRef(null)
 
   // —— Filtros tarjetas (revisiones)
   const [campaniaId, setCampaniaId] = useState(String(campaniaIdDefault || ''))
@@ -101,6 +114,10 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaniaId, authOK, colaEstado, colaArchivada, soloDif, consenso, sku])
 
+  useEffect(() => () => {
+    if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
+  }, [])
+
   // ===== Acciones tarjetas =====
   async function onAceptar(sku, prop) {
     await decidirRevision({
@@ -148,10 +165,28 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Acciones cola (fila) =====
   async function onUndoRow(id) {
     await undoActualizacion(id)
+    if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
+    setUiMessage({
+      variant: 'info',
+      text: 'Actualización deshecha. Quedó como pendiente nuevamente.'
+    })
+    messageTimeoutRef.current = setTimeout(() => {
+      setUiMessage(null)
+      messageTimeoutRef.current = null
+    }, 4000)
     await cargar()
   }
   async function onRevertRow(id) {
     await revertirActualizacion(id)
+    if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
+    setUiMessage({
+      variant: 'warning',
+      text: 'Se creó una reversión pendiente. Aplicala desde la cola para impactar Maestro.'
+    })
+    messageTimeoutRef.current = setTimeout(() => {
+      setUiMessage(null)
+      messageTimeoutRef.current = null
+    }, 4000)
     await cargar()
   }
   async function onToggleArchiveRow(a) {
@@ -162,7 +197,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Exportaciones =====
   async function onExportCola() {
     const blob = await exportActualizacionesCSV(Number(campaniaId))
-    descargarBlobDirecto(blob, 'actualizaciones_pendientes.csv')
+    descargarBlobDirecto(blob, 'actualizaciones_campania.csv')
   }
   async function onExportTxtCat(estado='aceptadas', incluirArchivadas=false) {
     const b = await exportTxtCategoria(Number(campaniaId), estado, incluirArchivadas)
@@ -463,7 +498,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 <Dropdown.Toggle split variant="outline-secondary" />
                 <Dropdown.Menu align="end">
                   <Dropdown.Header>Exportar</Dropdown.Header>
-                  <Dropdown.Item disabled={!authOK} onClick={onExportCola}>CSV pendientes</Dropdown.Item>
+                  <Dropdown.Item disabled={!authOK} onClick={onExportCola}>CSV actualizaciones (campaña)</Dropdown.Item>
                   <Dropdown.Item disabled={!authOK} onClick={()=>onExportTxtCat('aceptadas')}>TXT Categoría (aceptadas)</Dropdown.Item>
                   <Dropdown.Item disabled={!authOK} onClick={()=>onExportTxtTipo('aceptadas')}>TXT Tipo (aceptadas)</Dropdown.Item>
                   <Dropdown.Item disabled={!authOK} onClick={()=>onExportTxtClasif('aceptadas')}>TXT Clasif (aceptadas)</Dropdown.Item>
@@ -479,6 +514,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
             </Card.Header>
 
             <Card.Body className="pt-0">
+              {uiMessage && (
+                <Alert variant={uiMessage.variant} className="mt-3">
+                  {uiMessage.text}
+                </Alert>
+              )}
               <Table size="sm" bordered hover className="align-middle">
                 <thead>
                   <tr>
@@ -562,7 +602,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                           ) : (
                             <Button size="sm" variant="outline-primary" className="me-1"
                                     onClick={()=>onRevertRow(a.id)} disabled={!authOK}>
-                              Revertir
+                              Crear reversión
                             </Button>
                           )}
                           <Button size="sm"
