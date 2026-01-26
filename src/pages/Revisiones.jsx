@@ -87,10 +87,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Carga diccionarios =====
   useEffect(() => { getDictionaries().then(setDic).catch(()=>{}) }, [])
   useEffect(() => {
-    if (!campaniaId && campaniaIdDefault) {
-      setCampaniaId(String(campaniaIdDefault))
-    }
-  }, [campaniaId, campaniaIdDefault])
+    if (!campaniaIdDefault) return
+    setCampaniaId(prev => (prev ? prev : String(campaniaIdDefault)))
+  }, [campaniaIdDefault])
 
   // ===== Carga datos =====
   async function cargar() {
