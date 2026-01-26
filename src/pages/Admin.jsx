@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import React, { useEffect, useState } from 'react'
-import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Badge } from 'react-bootstrap'
+import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Badge, Spinner } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
 import { getCampaigns, setActiveCampaign, getDictionaries } from '../services/api.js'
 import { pad2 } from '../utils/sku.js'
@@ -21,9 +21,11 @@ export default function Admin() {
   const [token, setToken] = useState(adminGetToken())
   const [authOK, setAuthOK] = useState(false)
   const [error, setError] = useState(null)
-const [filesDic, setFilesDic] = useState({ categorias: null, tipos: null, clasif: null })
-const [fileMae, setFileMae] = useState(null)
-const [importMsg, setImportMsg] = useState('')
+  const [filesDic, setFilesDic] = useState({ categorias: null, tipos: null, clasif: null })
+  const [fileMae, setFileMae] = useState(null)
+  const [importMsg, setImportMsg] = useState('')
+  const [isUploadingDic, setIsUploadingDic] = useState(false)
+  const [isUploadingMae, setIsUploadingMae] = useState(false)
   const [dic, setDic] = useState(null)
 
   const [dicEjemplo, setDicEjemplo] = useState(JSON.stringify({
@@ -40,7 +42,8 @@ const [importMsg, setImportMsg] = useState('')
     nombre: '', inicia: '', termina: '',
     categoria_objetivo_cod: '', tipo_objetivo_cod: '', clasif_objetivo_cod: ''
   })
-const navigate = useNavigate()
+  const navigate = useNavigate()
+  const isUploading = isUploadingDic || isUploadingMae
   const [campaniaIdAud, setCampaniaIdAud] = useState('')
   const [discrepancias, setDiscrepancias] = useState([])
   const [discrepSuc, setDiscrepSuc] = useState([])
@@ -55,22 +58,32 @@ const navigate = useNavigate()
   }, [])
 
   async function importarDicPorArchivo() {
+  if (isUploadingDic) return
   try {
-    setError(null); setImportMsg('')
+    setIsUploadingDic(true)
+    setError(null)
+    setImportMsg('')
     const r = await uploadDiccionarios(filesDic)
     setImportMsg(`Diccionarios OK → categorías=${r.categorias}, tipos=${r.tipos}, clasif=${r.clasif}`)
-    getDictionaries().then(setDic).catch(()=>{})
+    getDictionaries().then(setDic).catch(() => {})
   } catch (e) {
     setError(e.message || 'Error importando diccionarios (archivo)')
+  } finally {
+    setIsUploadingDic(false)
   }
 }
 async function importarMaePorArchivo() {
+  if (isUploadingMae) return
   try {
-    setError(null); setImportMsg('')
+    setIsUploadingMae(true)
+    setError(null)
+    setImportMsg('')
     const r = await uploadMaestro({ maestro: fileMae })
     setImportMsg(`Maestro OK → ${r.count} items`)
   } catch (e) {
     setError(e.message || 'Error importando maestro (archivo)')
+  } finally {
+    setIsUploadingMae(false)
   }
 }
 
@@ -257,6 +270,7 @@ async function importarMaePorArchivo() {
           <Form.Control
             type="file"
             accept=".csv"
+            disabled={!authOK || isUploading}
             onChange={e => setFilesDic(s => ({ ...s, categorias: e.target.files?.[0] || null }))}
           />
         </Form.Group>
@@ -266,6 +280,7 @@ async function importarMaePorArchivo() {
           <Form.Control
             type="file"
             accept=".csv"
+            disabled={!authOK || isUploading}
             onChange={e => setFilesDic(s => ({ ...s, tipos: e.target.files?.[0] || null }))}
           />
         </Form.Group>
@@ -275,11 +290,12 @@ async function importarMaePorArchivo() {
           <Form.Control
             type="file"
             accept=".csv"
+            disabled={!authOK || isUploading}
             onChange={e => setFilesDic(s => ({ ...s, clasif: e.target.files?.[0] || null }))}
           />
         </Form.Group>
 
-        <Button onClick={importarDicPorArchivo} disabled={!authOK}>
+        <Button onClick={importarDicPorArchivo} disabled={!authOK || isUploading}>
           Subir diccionarios
         </Button>
       </Col>
@@ -292,16 +308,23 @@ async function importarMaePorArchivo() {
           <Form.Control
             type="file"
             accept=".csv"
+            disabled={!authOK || isUploading}
             onChange={e => setFileMae(e.target.files?.[0] || null)}
           />
         </Form.Group>
 
-        <Button onClick={importarMaePorArchivo} disabled={!authOK}>
+        <Button onClick={importarMaePorArchivo} disabled={!authOK || isUploading}>
           Subir maestro
         </Button>
       </Col>
     </Row>
 
+    {isUploading && (
+      <div className="mt-3 text-muted d-flex align-items-center gap-2">
+        <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+        <span>Cargando…</span>
+      </div>
+    )}
     {importMsg && <Alert variant="success" className="mt-3">{importMsg}</Alert>}
 
     <div className="mt-3 small text-muted">
