@@ -152,7 +152,13 @@ export default function AuditoriaPage({ adminToken = '' }) {
       </ul>
 
       {tab==='maestro'
-        ? <DiscrepanciasTabla data={dataM} loading={loading} />
+        ? (
+          <DiscrepanciasTabla
+            data={dataM}
+            loading={loading}
+            onExportCSV={() => apiExportDiscrepanciasCSV(campaniaId)}
+          />
+        )
         : <DiscrepanciasSucursalesTabla data={dataS} loading={loading} />
       }
     </div>

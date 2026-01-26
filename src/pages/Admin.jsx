@@ -58,34 +58,43 @@ export default function Admin() {
   }, [])
 
   async function importarDicPorArchivo() {
-  if (isUploadingDic) return
-  try {
-    setIsUploadingDic(true)
-    setError(null)
-    setImportMsg('')
-    const r = await uploadDiccionarios(filesDic)
-    setImportMsg(`Diccionarios OK → categorías=${r.categorias}, tipos=${r.tipos}, clasif=${r.clasif}`)
-    getDictionaries().then(setDic).catch(() => {})
-  } catch (e) {
-    setError(e.message || 'Error importando diccionarios (archivo)')
-  } finally {
-    setIsUploadingDic(false)
+    if (isUploadingDic) return
+    const hasFiles = Boolean(filesDic.categorias || filesDic.tipos || filesDic.clasif)
+    if (!hasFiles) {
+      setError('Seleccioná al menos un archivo de diccionario antes de subir.')
+      return
+    }
+    try {
+      setIsUploadingDic(true)
+      setError(null)
+      setImportMsg('')
+      const r = await uploadDiccionarios(filesDic)
+      setImportMsg(`Diccionarios OK → categorías=${r.categorias}, tipos=${r.tipos}, clasif=${r.clasif}`)
+      getDictionaries().then(setDic).catch(() => {})
+    } catch (e) {
+      setError(e.message || 'Error importando diccionarios (archivo)')
+    } finally {
+      setIsUploadingDic(false)
+    }
   }
-}
-async function importarMaePorArchivo() {
-  if (isUploadingMae) return
-  try {
-    setIsUploadingMae(true)
-    setError(null)
-    setImportMsg('')
-    const r = await uploadMaestro({ maestro: fileMae })
-    setImportMsg(`Maestro OK → ${r.count} items`)
-  } catch (e) {
-    setError(e.message || 'Error importando maestro (archivo)')
-  } finally {
-    setIsUploadingMae(false)
+  async function importarMaePorArchivo() {
+    if (isUploadingMae) return
+    if (!fileMae) {
+      setError('Seleccioná un archivo maestro antes de subir.')
+      return
+    }
+    try {
+      setIsUploadingMae(true)
+      setError(null)
+      setImportMsg('')
+      const r = await uploadMaestro({ maestro: fileMae })
+      setImportMsg(`Maestro OK → ${r.count} items`)
+    } catch (e) {
+      setError(e.message || 'Error importando maestro (archivo)')
+    } finally {
+      setIsUploadingMae(false)
+    }
   }
-}
 
   async function cargarCampanias() {
     try {
@@ -295,7 +304,10 @@ async function importarMaePorArchivo() {
           />
         </Form.Group>
 
-        <Button onClick={importarDicPorArchivo} disabled={!authOK || isUploading}>
+        <Button
+          onClick={importarDicPorArchivo}
+          disabled={!authOK || isUploading || !(filesDic.categorias || filesDic.tipos || filesDic.clasif)}
+        >
           Subir diccionarios
         </Button>
       </Col>
@@ -313,7 +325,7 @@ async function importarMaePorArchivo() {
           />
         </Form.Group>
 
-        <Button onClick={importarMaePorArchivo} disabled={!authOK || isUploading}>
+        <Button onClick={importarMaePorArchivo} disabled={!authOK || isUploading || !fileMae}>
           Subir maestro
         </Button>
       </Col>
