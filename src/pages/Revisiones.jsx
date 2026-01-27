@@ -13,7 +13,9 @@ import {
   Dropdown,
   ButtonGroup,
   Tabs,
-  Tab
+  Tab,
+  Toast,
+  ToastContainer
 } from 'react-bootstrap'
 import { getDictionaries } from '../services/api'
 import { pad2 } from '../utils/sku'
@@ -70,6 +72,8 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // Toolbar de la cola (server-side)
   const [colaEstado, setColaEstado] = useState('')              // '', 'pendiente', 'aplicada', 'rechazada'
   const [colaArchivada, setColaArchivada] = useState('activas') // 'activas'|'archivadas'|'todas'
+  const [exportIncludeArchived, setExportIncludeArchived] = useState(false)
+  const [toast, setToast] = useState({ show: false, variant: 'success', message: '' })
 
   // Filtros por columna (client-side)
   const [fSKU, setFSKU] = useState('')
@@ -87,10 +91,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Carga diccionarios =====
   useEffect(() => { getDictionaries().then(setDic).catch(()=>{}) }, [])
   useEffect(() => {
-    if (!campaniaId && campaniaIdDefault) {
-      setCampaniaId(String(campaniaIdDefault))
-    }
-  }, [campaniaId, campaniaIdDefault])
+    if (!campaniaIdDefault) return
+    setCampaniaId(prev => (prev ? prev : String(campaniaIdDefault)))
+  }, [campaniaIdDefault])
 
   // ===== Carga datos =====
   async function cargar() {
@@ -149,10 +152,30 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Acciones cola (masivas) =====
   async function onAplicarSeleccion() {
     const pendientes = cola.filter(a => seleccion.includes(a.id) && a.estado === 'pendiente').map(a => a.id)
-    if (!pendientes.length) return
-    await aplicarActualizaciones(pendientes, 'admin@local')
-    setSeleccion([])
-    await cargar()
+    if (!pendientes.length) {
+      setToast({
+        show: true,
+        variant: 'warning',
+        message: 'No hay pendientes seleccionadas para aplicar.'
+      })
+      return
+    }
+    try {
+      await aplicarActualizaciones(pendientes, 'admin@local')
+      setSeleccion([])
+      setToast({
+        show: true,
+        variant: 'success',
+        message: `Se aplicaron ${pendientes.length} actualizaciones.`
+      })
+      await cargar()
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudieron aplicar las actualizaciones.'
+      })
+    }
   }
   async function onArchivarSeleccion() {
     if (!seleccion.length) return
@@ -302,6 +325,57 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== UI =====
   return (
     <>
+      <Card className="mb-3">
+        <Card.Body className="d-flex flex-column flex-lg-row gap-3 align-items-start align-items-lg-center justify-content-between">
+          <div>
+            <div className="fw-semibold">Flujo guiado</div>
+            <div className="text-muted small">
+              Paso 1: evaluá discrepancias, Paso 2: confirmá decisiones en la cola, Paso 3: exportá resultados.
+            </div>
+          </div>
+          <ButtonGroup aria-label="Wizard steps">
+            <Button
+              variant={activeTab === 'revisiones' ? 'primary' : 'outline-primary'}
+              onClick={() => setActiveTab('revisiones')}
+            >
+              1. Evaluar
+            </Button>
+            <Button
+              variant={activeTab === 'cola' ? 'primary' : 'outline-primary'}
+              onClick={() => {
+                setActiveTab('cola')
+                setTimeout(() => colaRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
+              }}
+            >
+              2. Decidir
+            </Button>
+            <Button
+              variant={activeTab === 'export' ? 'primary' : 'outline-primary'}
+              onClick={() => setActiveTab('export')}
+            >
+              3. Exportar
+            </Button>
+          </ButtonGroup>
+        </Card.Body>
+      </Card>
+
+      <ToastContainer position="bottom-end" className="p-3">
+        <Toast
+          bg={toast.variant}
+          onClose={() => setToast(prev => ({ ...prev, show: false }))}
+          show={toast.show}
+          delay={3500}
+          autohide
+        >
+          <Toast.Header>
+            <strong className="me-auto">Cola</strong>
+          </Toast.Header>
+          <Toast.Body className={toast.variant === 'warning' ? 'text-dark' : 'text-white'}>
+            {toast.message}
+          </Toast.Body>
+        </Toast>
+      </ToastContainer>
+
       {/* Barra superior común */}
       <Card className="mb-3">
         <Card.Body className="row g-2">
@@ -367,7 +441,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
               variant="outline-dark"
               onClick={()=>{ setActiveTab('cola'); setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 60) }}
             >
-              Ir a Cola
+              Ir a Paso 2 (Cola)
             </Button>
           </div>
 
@@ -500,6 +574,12 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 <Button variant="primary" disabled={!authOK || !seleccion.length} onClick={onAplicarSeleccion}>
                   Aplicar seleccionadas
                 </Button>
+                <Button
+                  variant="outline-primary"
+                  onClick={() => setActiveTab('export')}
+                >
+                  Ir a Paso 3
+                </Button>
                 <Dropdown.Toggle split variant="outline-secondary" />
                 <Dropdown.Menu align="end">
                   <Dropdown.Header>Exportar</Dropdown.Header>
@@ -624,6 +704,82 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                   )}
                 </tbody>
               </Table>
+            </Card.Body>
+          </Card>
+        </Tab>
+        <Tab eventKey="export" title="Exportar">
+          <Card>
+            <Card.Header className="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+              <div>
+                <strong>Exportación de decisiones</strong>
+                <div className="text-muted small">
+                  Exportá las decisiones aceptadas para actualizar tu sistema de gestión.
+                </div>
+              </div>
+              <Button
+                variant="outline-secondary"
+                onClick={() => setActiveTab('cola')}
+              >
+                Volver a Paso 2
+              </Button>
+            </Card.Header>
+            <Card.Body>
+              <Row className="g-3">
+                <Col md={6}>
+                  <Card className="h-100">
+                    <Card.Body>
+                      <h6>Exportación CSV</h6>
+                      <p className="text-muted small">
+                        Descarga el detalle completo de actualizaciones de la campaña.
+                      </p>
+                      <Button variant="primary" disabled={!authOK} onClick={onExportCola}>
+                        Exportar CSV de actualizaciones
+                      </Button>
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={6}>
+                  <Card className="h-100">
+                    <Card.Body>
+                      <h6>Exportación TXT (aceptadas)</h6>
+                      <p className="text-muted small">
+                        Exporta sólo los cambios aceptados para cada atributo.
+                      </p>
+                      <Form.Check
+                        type="switch"
+                        id="export-include-archived"
+                        label="Incluir archivadas"
+                        checked={exportIncludeArchived}
+                        onChange={e => setExportIncludeArchived(e.target.checked)}
+                        className="mb-2"
+                      />
+                      <div className="d-flex flex-wrap gap-2">
+                        <Button
+                          variant="outline-primary"
+                          disabled={!authOK}
+                          onClick={() => onExportTxtCat('aceptadas', exportIncludeArchived)}
+                        >
+                          TXT Categoría
+                        </Button>
+                        <Button
+                          variant="outline-primary"
+                          disabled={!authOK}
+                          onClick={() => onExportTxtTipo('aceptadas', exportIncludeArchived)}
+                        >
+                          TXT Tipo
+                        </Button>
+                        <Button
+                          variant="outline-primary"
+                          disabled={!authOK}
+                          onClick={() => onExportTxtClasif('aceptadas', exportIncludeArchived)}
+                        >
+                          TXT Clasif
+                        </Button>
+                      </div>
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
             </Card.Body>
           </Card>
         </Tab>
