@@ -12,8 +12,9 @@ export default function ScanBox({ user, campania }) {
   const [sku, setSku] = useState("");
   const [resultado, setResultado] = useState(null); // { estado, maestro?, asumidos? }
   const [sugeridos, setSugeridos] = useState({});
-  const [guardadoOK, setGuardadoOK] = useState(false);
+  const [guardadoInfo, setGuardadoInfo] = useState(null);
   const inputRef = useRef(null);
+  const canScan = Boolean(campania?.activa);
 
   useEffect(() => {
     getDictionaries()
@@ -43,7 +44,8 @@ export default function ScanBox({ user, campania }) {
 
   async function procesar(e) {
     e.preventDefault();
-    setGuardadoOK(false);
+    setGuardadoInfo(null);
+    if (!canScan) return;
     const limpio = cleanSku(skuRaw);
     setSku(limpio);
     if (!limpio) return;
@@ -63,7 +65,7 @@ export default function ScanBox({ user, campania }) {
   }
 
   async function guardarYContinuar() {
-    if (!resultado) return;
+    if (!resultado || !canScan) return;
     if (!campania?.id) {
       alert("Seleccioná una campaña activa antes de guardar.");
       return;
@@ -84,7 +86,7 @@ export default function ScanBox({ user, campania }) {
       skuRaw: sku,
       sugeridos,
     }).catch((e) => alert(e.message || "No se pudo guardar"));
-    setGuardadoOK(true);
+    setGuardadoInfo({ sku, at: new Date() });
     setSkuRaw("");
     setSku("");
     setSugeridos({});
@@ -114,6 +116,11 @@ export default function ScanBox({ user, campania }) {
         <strong>Escaneo</strong>
       </Card.Header>
       <Card.Body>
+        {!canScan && (
+          <Alert variant="warning" className="mb-3">
+            No hay campaña activa. Activá una campaña para habilitar el escaneo.
+          </Alert>
+        )}
         <Form onSubmit={procesar}>
           <Row className="g-2 align-items-end">
             <Col md={7}>
@@ -128,6 +135,7 @@ export default function ScanBox({ user, campania }) {
                   ref={inputRef}
                   autoFocus
                   required
+                  disabled={!canScan}
                 />
                 <Form.Text>
                   Se toma sólo el prefijo alfanumérico y se normaliza en
@@ -136,14 +144,14 @@ export default function ScanBox({ user, campania }) {
               </Form.Group>
             </Col>
             <Col md={5}>
-              <Button type="submit" className="me-2">
+              <Button type="submit" className="me-2" disabled={!canScan}>
                 Procesar
               </Button>
               <Button
                 type="button"
                 variant="success"
                 onClick={guardarYContinuar}
-                disabled={!resultado || !campania?.id}
+                disabled={!resultado || !campania?.id || !canScan}
               >
                 Guardar & Continuar
               </Button>
@@ -151,9 +159,9 @@ export default function ScanBox({ user, campania }) {
           </Row>
         </Form>
 
-        {guardadoOK && (
+        {guardadoInfo && (
           <Alert variant="success" className="mt-3">
-            Guardado OK
+            Guardado OK · SKU {guardadoInfo.sku} · {guardadoInfo.at.toLocaleString()}
           </Alert>
         )}
 

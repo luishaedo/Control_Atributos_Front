@@ -119,10 +119,6 @@ export default function AuditoriaPage({ adminToken = '' }) {
         <button className="btn btn-primary ms-auto" disabled={loading} onClick={fetchData}>
           {loading ? 'Cargando…' : 'Actualizar'}
         </button>
-        <button className="btn btn-outline-secondary" disabled={!campaniaId}
-          onClick={()=>apiExportDiscrepanciasCSV(campaniaId)}>
-          Exportar CSV
-        </button>
       </div>
 
       {error && <div className="alert alert-warning py-2">{error}</div>}
@@ -157,9 +153,17 @@ export default function AuditoriaPage({ adminToken = '' }) {
             data={dataM}
             loading={loading}
             onExportCSV={() => apiExportDiscrepanciasCSV(campaniaId)}
+            exportLabel="Exportar discrepancias vs maestro (CSV)"
           />
         )
-        : <DiscrepanciasSucursalesTabla data={dataS} loading={loading} />
+        : (
+          <>
+            <div className="alert alert-info py-2">
+              La exportación CSV sólo está disponible en la pestaña “Vs Maestro”.
+            </div>
+            <DiscrepanciasSucursalesTabla data={dataS} loading={loading} />
+          </>
+        )
       }
     </div>
   )

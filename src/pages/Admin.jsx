@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import React, { useEffect, useState } from 'react'
 import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Badge, Spinner } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
+import IdentityModal from '../components/IdentityModal.jsx'
 import { getCampaigns, setActiveCampaign, getDictionaries } from '../services/api.js'
 import { pad2 } from '../utils/sku.js'
 import Revisiones from './Revisiones.jsx'
@@ -15,8 +16,20 @@ import {
 import { uploadDiccionarios, uploadMaestro } from '../services/adminImportApi.js'
 
 
+function getUserLS() {
+  try {
+    return JSON.parse(localStorage.getItem('cc_user') || 'null')
+  } catch {
+    return null
+  }
+}
+
+function setUserLS(u) {
+  localStorage.setItem('cc_user', JSON.stringify(u || {}))
+}
+
 export default function Admin() {
-  const [user] = useState({ email: 'admin@local', sucursal: 'Admin' })
+  const [user, setUser] = useState(getUserLS() || { email: 'admin@local', sucursal: 'Admin' })
 
   const [token, setToken] = useState(adminGetToken())
   const [authOK, setAuthOK] = useState(false)
@@ -47,6 +60,7 @@ export default function Admin() {
   const [campaniaIdAud, setCampaniaIdAud] = useState('')
   const [discrepancias, setDiscrepancias] = useState([])
   const [discrepSuc, setDiscrepSuc] = useState([])
+  const [showIdentityModal, setShowIdentityModal] = useState(false)
 
   useEffect(() => {
     if (token) {
@@ -56,6 +70,16 @@ export default function Admin() {
     cargarCampanias()
     getDictionaries().then(setDic).catch(() => {})
   }, [])
+
+  function guardarIdentificacion(nuevo) {
+    setUser(nuevo)
+    setUserLS(nuevo)
+    setShowIdentityModal(false)
+  }
+
+  function cambiarIdentificacion() {
+    setShowIdentityModal(true)
+  }
 
   async function importarDicPorArchivo() {
     if (isUploadingDic) return
@@ -239,7 +263,7 @@ export default function Admin() {
 
   return (
     <div>
-      <Topbar user={user} onChangeUser={() => {}} />
+      <Topbar user={user} onChangeUser={cambiarIdentificacion} />
       <Container className="pb-5">
         <Card className="mb-3">
           <Card.Body>
@@ -470,6 +494,13 @@ export default function Admin() {
           </Tab>
         </Tabs>
       </Container>
+      <IdentityModal
+        show={showIdentityModal}
+        initialEmail={user?.email || ''}
+        initialSucursal={user?.sucursal || ''}
+        onSave={guardarIdentificacion}
+        onClose={() => setShowIdentityModal(false)}
+      />
     </div>
   )
 }
