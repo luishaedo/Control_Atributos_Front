@@ -32,12 +32,11 @@ export default function CampaignSelector({ onSelect }) {
           getCampaigns(),
           getDictionaries(),
         ]);
-        const activas = (camps || []).filter((c) => c.activa);
-        setListado(activas);
+        setListado(camps || []);
         setDic(d);
         const saved = Number(localStorage.getItem(LS_KEY) || 0);
-        const savedObj = activas.find((c) => c.id === saved) || null;
-        const elegida = savedObj || activas[0] || null;
+        const savedObj = (camps || []).find((c) => c.id === saved && c.activa) || null;
+        const elegida = savedObj || (camps || []).find((c) => c.activa) || null;
         if (elegida) {
           onSelect?.(elegida);
           localStorage.setItem(LS_KEY, String(elegida.id));
@@ -60,10 +59,8 @@ export default function CampaignSelector({ onSelect }) {
       setError(null);
       await setActiveCampaign(id);
       const camps = await getCampaigns();
-      const activas = (camps || []).filter((c) => c.activa);
-      setListado(activas);
-      const nuevaActiva =
-        activas.find((c) => c.id === id) || activas[0] || null;
+      setListado(camps || []);
+      const nuevaActiva = (camps || []).find((c) => c.activa) || null;
       if (nuevaActiva) {
         onSelect?.(nuevaActiva);
         localStorage.setItem(LS_KEY, String(nuevaActiva.id));
@@ -124,7 +121,6 @@ export default function CampaignSelector({ onSelect }) {
       <Card.Header className="d-flex justify-content-between align-items-center">
         <strong>Campaña activa</strong>
         <div>
-          {/* 🔵 4) Solo mostramos botones de campañas ACTIVAS */}
           <ButtonGroup>
             {listado.map(c => (
               <Button
@@ -135,7 +131,7 @@ export default function CampaignSelector({ onSelect }) {
                 disabled={loading}
               >
                 {c.nombre}{' '}
-                {c.activa ? <Badge bg="light" text="dark">Activa</Badge> : null}
+                {c.activa ? <Badge bg="light" text="dark">Activa</Badge> : <Badge bg="secondary">Inactiva</Badge>}
               </Button>
             ))}
           </ButtonGroup>
@@ -147,7 +143,7 @@ export default function CampaignSelector({ onSelect }) {
 
         {!loading && listado.length === 0 && (
           <Alert variant="warning" className="mb-0">
-            No hay campañas <strong>activas</strong> disponibles. Activá una en el panel de Admin.
+            No hay campañas disponibles. Creá una y activala en el panel de Admin.
           </Alert>
         )}
 

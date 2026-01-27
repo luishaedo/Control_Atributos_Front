@@ -572,7 +572,13 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
 
               <Dropdown as={ButtonGroup}>
                 <Button variant="primary" disabled={!authOK || !seleccion.length} onClick={onAplicarSeleccion}>
-                  Aplicar seleccionadas
+                  Confirmar y aplicar seleccionadas (impacta maestro)
+                </Button>
+                <Button
+                  variant="outline-primary"
+                  onClick={() => setActiveTab('export')}
+                >
+                  Ir a Paso 3
                 </Button>
                 <Button
                   variant="outline-primary"
@@ -587,10 +593,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                   <Dropdown.Item disabled={!authOK} onClick={()=>onExportTxtCat('aceptadas')}>TXT Categoría (aceptadas)</Dropdown.Item>
                   <Dropdown.Item disabled={!authOK} onClick={()=>onExportTxtTipo('aceptadas')}>TXT Tipo (aceptadas)</Dropdown.Item>
                   <Dropdown.Item disabled={!authOK} onClick={()=>onExportTxtClasif('aceptadas')}>TXT Clasif (aceptadas)</Dropdown.Item>
-                  <Dropdown.Divider />
-                  <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={()=>onExportTxtSeleccion('categoria')}>TXT Categoría (selección)</Dropdown.Item>
-                  <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={()=>onExportTxtSeleccion('tipo')}>TXT Tipo (selección)</Dropdown.Item>
-                  <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={()=>onExportTxtSeleccion('clasif')}>TXT Clasif (selección)</Dropdown.Item>
                   <Dropdown.Divider />
                   <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={onArchivarSeleccion}>Archivar seleccionadas</Dropdown.Item>
                   <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={onDesarchivarSeleccion}>Desarchivar seleccionadas</Dropdown.Item>
@@ -725,12 +727,12 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
             </Card.Header>
             <Card.Body>
               <Row className="g-3">
-                <Col md={6}>
+                <Col md={4}>
                   <Card className="h-100">
                     <Card.Body>
                       <h6>Exportación CSV</h6>
                       <p className="text-muted small">
-                        Descarga el detalle completo de actualizaciones de la campaña.
+                        Descarga el detalle completo de actualizaciones de la campaña (incluye estados).
                       </p>
                       <Button variant="primary" disabled={!authOK} onClick={onExportCola}>
                         Exportar CSV de actualizaciones
@@ -738,12 +740,12 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                     </Card.Body>
                   </Card>
                 </Col>
-                <Col md={6}>
+                <Col md={4}>
                   <Card className="h-100">
                     <Card.Body>
                       <h6>Exportación TXT (aceptadas)</h6>
                       <p className="text-muted small">
-                        Exporta sólo los cambios aceptados para cada atributo.
+                        Exporta sólo los cambios aceptados para cada atributo. Activá “Incluir archivadas” si querés sumar el historial.
                       </p>
                       <Form.Check
                         type="switch"
@@ -776,6 +778,44 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                           TXT Clasif
                         </Button>
                       </div>
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={4}>
+                  <Card className="h-100">
+                    <Card.Body>
+                      <h6>Exportación TXT (selección actual)</h6>
+                      <p className="text-muted small">
+                        Exporta sólo los SKUs seleccionados en la cola (pendientes, aplicados o rechazados).
+                      </p>
+                      <div className="d-flex flex-wrap gap-2">
+                        <Button
+                          variant="outline-secondary"
+                          disabled={!authOK || !seleccion.length}
+                          onClick={() => onExportTxtSeleccion('categoria')}
+                        >
+                          TXT Categoría (selección)
+                        </Button>
+                        <Button
+                          variant="outline-secondary"
+                          disabled={!authOK || !seleccion.length}
+                          onClick={() => onExportTxtSeleccion('tipo')}
+                        >
+                          TXT Tipo (selección)
+                        </Button>
+                        <Button
+                          variant="outline-secondary"
+                          disabled={!authOK || !seleccion.length}
+                          onClick={() => onExportTxtSeleccion('clasif')}
+                        >
+                          TXT Clasif (selección)
+                        </Button>
+                      </div>
+                      {!seleccion.length && (
+                        <div className="text-muted small mt-2">
+                          Seleccioná filas en la cola para habilitar estas exportaciones.
+                        </div>
+                      )}
                     </Card.Body>
                   </Card>
                 </Col>
