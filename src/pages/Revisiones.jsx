@@ -13,7 +13,9 @@ import {
   Dropdown,
   ButtonGroup,
   Tabs,
-  Tab
+  Tab,
+  Toast,
+  ToastContainer
 } from 'react-bootstrap'
 import { getDictionaries } from '../services/api'
 import { pad2 } from '../utils/sku'
@@ -71,6 +73,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [colaEstado, setColaEstado] = useState('')              // '', 'pendiente', 'aplicada', 'rechazada'
   const [colaArchivada, setColaArchivada] = useState('activas') // 'activas'|'archivadas'|'todas'
   const [exportIncludeArchived, setExportIncludeArchived] = useState(false)
+  const [toast, setToast] = useState({ show: false, variant: 'success', message: '' })
 
   // Filtros por columna (client-side)
   const [fSKU, setFSKU] = useState('')
@@ -149,10 +152,30 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Acciones cola (masivas) =====
   async function onAplicarSeleccion() {
     const pendientes = cola.filter(a => seleccion.includes(a.id) && a.estado === 'pendiente').map(a => a.id)
-    if (!pendientes.length) return
-    await aplicarActualizaciones(pendientes, 'admin@local')
-    setSeleccion([])
-    await cargar()
+    if (!pendientes.length) {
+      setToast({
+        show: true,
+        variant: 'warning',
+        message: 'No hay pendientes seleccionadas para aplicar.'
+      })
+      return
+    }
+    try {
+      await aplicarActualizaciones(pendientes, 'admin@local')
+      setSeleccion([])
+      setToast({
+        show: true,
+        variant: 'success',
+        message: `Se aplicaron ${pendientes.length} actualizaciones.`
+      })
+      await cargar()
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudieron aplicar las actualizaciones.'
+      })
+    }
   }
   async function onArchivarSeleccion() {
     if (!seleccion.length) return
@@ -335,6 +358,23 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           </ButtonGroup>
         </Card.Body>
       </Card>
+
+      <ToastContainer position="bottom-end" className="p-3">
+        <Toast
+          bg={toast.variant}
+          onClose={() => setToast(prev => ({ ...prev, show: false }))}
+          show={toast.show}
+          delay={3500}
+          autohide
+        >
+          <Toast.Header>
+            <strong className="me-auto">Cola</strong>
+          </Toast.Header>
+          <Toast.Body className={toast.variant === 'warning' ? 'text-dark' : 'text-white'}>
+            {toast.message}
+          </Toast.Body>
+        </Toast>
+      </ToastContainer>
 
       {/* Barra superior común */}
       <Card className="mb-3">
