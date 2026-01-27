@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import React, { useEffect, useState } from 'react'
 import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Badge, Spinner } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
+import IdentityModal from '../components/IdentityModal.jsx'
 import { getCampaigns, setActiveCampaign, getDictionaries } from '../services/api.js'
 import { pad2 } from '../utils/sku.js'
 import Revisiones from './Revisiones.jsx'
@@ -59,6 +60,7 @@ export default function Admin() {
   const [campaniaIdAud, setCampaniaIdAud] = useState('')
   const [discrepancias, setDiscrepancias] = useState([])
   const [discrepSuc, setDiscrepSuc] = useState([])
+  const [showIdentityModal, setShowIdentityModal] = useState(false)
 
   useEffect(() => {
     if (token) {
@@ -69,14 +71,14 @@ export default function Admin() {
     getDictionaries().then(setDic).catch(() => {})
   }, [])
 
-  function cambiarIdentificacion() {
-    const email = window.prompt('Ingresá tu email', user?.email || '')
-    if (email === null) return
-    const sucursal = window.prompt('Ingresá tu sucursal', user?.sucursal || '')
-    if (sucursal === null) return
-    const nuevo = { email: (email || '').trim(), sucursal: (sucursal || '').trim() }
+  function guardarIdentificacion(nuevo) {
     setUser(nuevo)
     setUserLS(nuevo)
+    setShowIdentityModal(false)
+  }
+
+  function cambiarIdentificacion() {
+    setShowIdentityModal(true)
   }
 
   async function importarDicPorArchivo() {
@@ -492,6 +494,13 @@ export default function Admin() {
           </Tab>
         </Tabs>
       </Container>
+      <IdentityModal
+        show={showIdentityModal}
+        initialEmail={user?.email || ''}
+        initialSucursal={user?.sucursal || ''}
+        onSave={guardarIdentificacion}
+        onClose={() => setShowIdentityModal(false)}
+      />
     </div>
   )
 }

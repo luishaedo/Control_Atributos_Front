@@ -156,7 +156,14 @@ export default function AuditoriaPage({ adminToken = '' }) {
             exportLabel="Exportar discrepancias vs maestro (CSV)"
           />
         )
-        : <DiscrepanciasSucursalesTabla data={dataS} loading={loading} />
+        : (
+          <>
+            <div className="alert alert-info py-2">
+              La exportación CSV sólo está disponible en la pestaña “Vs Maestro”.
+            </div>
+            <DiscrepanciasSucursalesTabla data={dataS} loading={loading} />
+          </>
+        )
       }
     </div>
   )
