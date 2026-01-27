@@ -580,6 +580,12 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 >
                   Ir a Paso 3
                 </Button>
+                <Button
+                  variant="outline-primary"
+                  onClick={() => setActiveTab('export')}
+                >
+                  Ir a Paso 3
+                </Button>
                 <Dropdown.Toggle split variant="outline-secondary" />
                 <Dropdown.Menu align="end">
                   <Dropdown.Header>Exportar</Dropdown.Header>
