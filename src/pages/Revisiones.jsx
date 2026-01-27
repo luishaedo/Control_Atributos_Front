@@ -570,34 +570,26 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 </small>
               </div>
 
-              <Dropdown as={ButtonGroup}>
-                <Button variant="primary" disabled={!authOK || !seleccion.length} onClick={onAplicarSeleccion}>
-                  Confirmar y aplicar seleccionadas (impacta maestro)
-                </Button>
-                <Button
-                  variant="outline-primary"
-                  onClick={() => setActiveTab('export')}
-                >
-                  Ir a Paso 3
-                </Button>
-                <Button
-                  variant="outline-primary"
-                  onClick={() => setActiveTab('export')}
-                >
-                  Ir a Paso 3
-                </Button>
-                <Dropdown.Toggle split variant="outline-secondary" />
-                <Dropdown.Menu align="end">
-                  <Dropdown.Header>Exportar</Dropdown.Header>
-                  <Dropdown.Item disabled={!authOK} onClick={onExportCola}>CSV actualizaciones (campaña)</Dropdown.Item>
-                  <Dropdown.Item disabled={!authOK} onClick={()=>onExportTxtCat('aceptadas')}>TXT Categoría (aceptadas)</Dropdown.Item>
-                  <Dropdown.Item disabled={!authOK} onClick={()=>onExportTxtTipo('aceptadas')}>TXT Tipo (aceptadas)</Dropdown.Item>
-                  <Dropdown.Item disabled={!authOK} onClick={()=>onExportTxtClasif('aceptadas')}>TXT Clasif (aceptadas)</Dropdown.Item>
-                  <Dropdown.Divider />
-                  <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={onArchivarSeleccion}>Archivar seleccionadas</Dropdown.Item>
-                  <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={onDesarchivarSeleccion}>Desarchivar seleccionadas</Dropdown.Item>
-                </Dropdown.Menu>
-              </Dropdown>
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <Dropdown as={ButtonGroup}>
+                  <Button variant="primary" disabled={!authOK || !seleccion.length} onClick={onAplicarSeleccion}>
+                    Confirmar y aplicar seleccionadas (impacta maestro)
+                  </Button>
+                  <Button
+                    variant="outline-primary"
+                    onClick={() => setActiveTab('export')}
+                  >
+                    Ir a Paso 3
+                  </Button>
+                  <Dropdown.Toggle split variant="outline-secondary" />
+                  <Dropdown.Menu align="end">
+                    <Dropdown.Header>Acciones masivas</Dropdown.Header>
+                    <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={onArchivarSeleccion}>Archivar seleccionadas</Dropdown.Item>
+                    <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={onDesarchivarSeleccion}>Desarchivar seleccionadas</Dropdown.Item>
+                  </Dropdown.Menu>
+                </Dropdown>
+                <small className="text-muted">Exportaciones en Paso 3</small>
+              </div>
             </Card.Header>
 
             <Card.Body className="pt-0">
