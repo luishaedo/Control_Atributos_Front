@@ -1,9 +1,14 @@
 import React, { useMemo, useState } from 'react'
 import { ConsensusBar, DiffPill, MaestroPill, MiniChips, fmtDate, EmptyState } from './ui'
 
-export default function DiscrepanciasTabla({ data = [], loading, onExportCSV }) {
+export default function DiscrepanciasTabla({ data = [], loading, onExportCSV, exportLabel = 'Exportar CSV' }) {
   const [buscar, setBuscar] = useState('')
   const [soloConflicto, setSoloConflicto] = useState(false)
+  const canExport = Boolean(onExportCSV)
+  const handleExport = () => {
+    if (!canExport) return
+    onExportCSV()
+  }
 
   const rows = useMemo(() => {
     let r = data || []
@@ -31,7 +36,9 @@ export default function DiscrepanciasTabla({ data = [], loading, onExportCSV }) 
             <input className="form-check-input" type="checkbox" id="soloConf" checked={soloConflicto} onChange={e=>setSoloConflicto(e.target.checked)} />
             <label className="form-check-label" htmlFor="soloConf">Sólo con diferencias</label>
           </div>
-          <button className="btn btn-sm btn-outline-secondary" onClick={onExportCSV}>Exportar CSV</button>
+          <button className="btn btn-sm btn-outline-secondary" onClick={handleExport} disabled={!canExport}>
+            {exportLabel}
+          </button>
         </div>
       </div>
       <div className="table-responsive">

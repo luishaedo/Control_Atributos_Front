@@ -6,6 +6,9 @@ function authHeader() {
 }
 
 export async function uploadDiccionarios({ categorias, tipos, clasif } = {}) {
+  if (!categorias && !tipos && !clasif) {
+    throw new Error('Select at least one dictionary file before uploading.')
+  }
   const fd = new FormData();
   if (categorias) fd.append('categorias', categorias);
   if (tipos) fd.append('tipos',     tipos);
@@ -22,6 +25,9 @@ export async function uploadDiccionarios({ categorias, tipos, clasif } = {}) {
 }
 
 export async function uploadMaestro({ maestro } = {}) {
+  if (!maestro) {
+    throw new Error('Select a master file before uploading.')
+  }
   const fd = new FormData();
   fd.append('maestro', maestro);
 

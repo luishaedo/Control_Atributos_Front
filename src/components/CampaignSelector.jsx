@@ -22,6 +22,8 @@ export default function CampaignSelector({ onSelect }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const activa = listado.find((c) => c.activa);
+  const [selectedId, setSelectedId] = useState(null);
+  const seleccionada = listado.find((c) => c.id === selectedId) || null;
 
   useEffect(() => {
     async function cargar() {
@@ -32,12 +34,11 @@ export default function CampaignSelector({ onSelect }) {
           getCampaigns(),
           getDictionaries(),
         ]);
-        const activas = (camps || []).filter((c) => c.activa);
-        setListado(activas);
+        setListado(camps || []);
         setDic(d);
         const saved = Number(localStorage.getItem(LS_KEY) || 0);
-        const savedObj = activas.find((c) => c.id === saved) || null;
-        const elegida = savedObj || activas[0] || null;
+        const savedObj = (camps || []).find((c) => c.id === saved && c.activa) || null;
+        const elegida = savedObj || (camps || []).find((c) => c.activa) || null;
         if (elegida) {
           onSelect?.(elegida);
           localStorage.setItem(LS_KEY, String(elegida.id));
@@ -45,6 +46,8 @@ export default function CampaignSelector({ onSelect }) {
           onSelect?.(null);
           localStorage.removeItem(LS_KEY);
         }
+        const defaultSelected = elegida?.id || (camps || [])[0]?.id || null;
+        setSelectedId(defaultSelected);
       } catch (e) {
         setError(e.message || "Error al cargar campañas/diccionarios");
       } finally {
@@ -55,21 +58,22 @@ export default function CampaignSelector({ onSelect }) {
   }, []);
 
   async function activar(id) {
+    if (!id) return;
     try {
       setLoading(true);
       setError(null);
       await setActiveCampaign(id);
       const camps = await getCampaigns();
-      const activas = (camps || []).filter((c) => c.activa);
-      setListado(activas);
-      const nuevaActiva =
-        activas.find((c) => c.id === id) || activas[0] || null;
+      setListado(camps || []);
+      const nuevaActiva = (camps || []).find((c) => c.activa) || null;
       if (nuevaActiva) {
         onSelect?.(nuevaActiva);
         localStorage.setItem(LS_KEY, String(nuevaActiva.id));
+        setSelectedId(nuevaActiva.id);
       } else {
         onSelect?.(null);
         localStorage.removeItem(LS_KEY);
+        setSelectedId(null);
       }
     } catch (e) {
       setError(e.message || "Error al activar campaña");
@@ -122,20 +126,27 @@ export default function CampaignSelector({ onSelect }) {
   return (
     <Card className="mb-3">
       <Card.Header className="d-flex justify-content-between align-items-center">
-        <strong>Campaña activa</strong>
-        <div>
-          {/* 🔵 4) Solo mostramos botones de campañas ACTIVAS */}
+        <strong>Campañas</strong>
+        <div className="d-flex align-items-center gap-2">
+          <Button
+            variant="success"
+            size="sm"
+            onClick={() => activar(seleccionada?.id)}
+            disabled={loading || !seleccionada || seleccionada.activa}
+          >
+            Activar seleccionada
+          </Button>
           <ButtonGroup>
             {listado.map(c => (
               <Button
                 key={c.id}
-                variant={c.activa ? 'success' : 'outline-secondary'}
+                variant={c.id === selectedId ? 'primary' : 'outline-secondary'}
                 size="sm"
-                onClick={() => activar(c.id)}
+                onClick={() => setSelectedId(c.id)}
                 disabled={loading}
               >
                 {c.nombre}{' '}
-                {c.activa ? <Badge bg="light" text="dark">Activa</Badge> : null}
+                {c.activa ? <Badge bg="light" text="dark">Activa</Badge> : <Badge bg="secondary">Inactiva</Badge>}
               </Button>
             ))}
           </ButtonGroup>
@@ -147,7 +158,7 @@ export default function CampaignSelector({ onSelect }) {
 
         {!loading && listado.length === 0 && (
           <Alert variant="warning" className="mb-0">
-            No hay campañas <strong>activas</strong> disponibles. Activá una en el panel de Admin.
+            No hay campañas disponibles. Creá una y activala en el panel de Admin.
           </Alert>
         )}
 
@@ -155,10 +166,22 @@ export default function CampaignSelector({ onSelect }) {
           <>
             <div className="mb-2">
               <small>
-                Vigencia: {activa?.inicia} → {activa?.termina}
+                Activa: {activa?.nombre || '—'} · Vigencia {activa?.inicia || '—'} → {activa?.termina || '—'}
               </small>
             </div>
             {activa ? chipObjetivo(activa) : null}
+            {seleccionada && seleccionada.id !== activa?.id && (
+              <div className="mt-2">
+                <small className="text-muted">
+                  Seleccionada: {seleccionada.nombre} · Vigencia {seleccionada.inicia || '—'} → {seleccionada.termina || '—'}
+                </small>
+              </div>
+            )}
+            {seleccionada && !seleccionada.activa && (
+              <Alert variant="warning" className="mt-2 mb-0">
+                La campaña seleccionada está inactiva. Usá “Activar seleccionada” para habilitarla.
+              </Alert>
+            )}
           </>
         )}
       </Card.Body>

@@ -15,8 +15,20 @@ import {
 import { uploadDiccionarios, uploadMaestro } from '../services/adminImportApi.js'
 
 
+function getUserLS() {
+  try {
+    return JSON.parse(localStorage.getItem('cc_user') || 'null')
+  } catch {
+    return null
+  }
+}
+
+function setUserLS(u) {
+  localStorage.setItem('cc_user', JSON.stringify(u || {}))
+}
+
 export default function Admin() {
-  const [user] = useState({ email: 'admin@local', sucursal: 'Admin' })
+  const [user, setUser] = useState(getUserLS() || { email: 'admin@local', sucursal: 'Admin' })
 
   const [token, setToken] = useState(adminGetToken())
   const [authOK, setAuthOK] = useState(false)
@@ -56,6 +68,16 @@ export default function Admin() {
     cargarCampanias()
     getDictionaries().then(setDic).catch(() => {})
   }, [])
+
+  function cambiarIdentificacion() {
+    const email = window.prompt('Ingresá tu email', user?.email || '')
+    if (email === null) return
+    const sucursal = window.prompt('Ingresá tu sucursal', user?.sucursal || '')
+    if (sucursal === null) return
+    const nuevo = { email: (email || '').trim(), sucursal: (sucursal || '').trim() }
+    setUser(nuevo)
+    setUserLS(nuevo)
+  }
 
   async function importarDicPorArchivo() {
     if (isUploadingDic) return
@@ -239,7 +261,7 @@ export default function Admin() {
 
   return (
     <div>
-      <Topbar user={user} onChangeUser={() => {}} />
+      <Topbar user={user} onChangeUser={cambiarIdentificacion} />
       <Container className="pb-5">
         <Card className="mb-3">
           <Card.Body>
