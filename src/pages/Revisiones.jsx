@@ -372,7 +372,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Contadores tarjetas =====
   const contadores = items.reduce((acc, it) => {
     for (const p of it.propuestas) {
-      if (!p.decision) acc.pendientes++
+      if (!p.decision || p.decision.estado === 'pendiente') acc.pendientes++
       else if (p.decision.estado === 'rechazada') acc.rechazadas++
       else acc.aceptadas++
     }
@@ -381,7 +381,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
 
   function filtrarPropuestas(p) {
     if (filtroDecision === 'todas') return true
-    if (filtroDecision === 'pendientes') return !p.decision
+    if (filtroDecision === 'pendientes') return !p.decision || p.decision?.estado === 'pendiente'
     if (filtroDecision === 'rechazadas') return p.decision?.estado === 'rechazada'
     if (filtroDecision === 'aceptadas') return p.decision && p.decision.estado !== 'rechazada'
     return true
