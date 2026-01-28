@@ -23,6 +23,7 @@ import { pad2 } from '../utils/sku'
 import {
   // Revisiones
   getRevisiones, decidirRevision,
+  importarMaestroJSON, getMissingMaestro,
   // Cola
   listarActualizaciones, exportActualizacionesCSV, aplicarActualizaciones,
   archivarActualizaciones, undoActualizacion, revertirActualizacion,
@@ -85,6 +86,11 @@ function getAcceptedAttributeDecision(propuestas = [], field) {
   const accepted = propuestas.find((p) => p?.decision && p?.decision?.estado !== 'rechazada' && p?.[field])
   return accepted?.decision || null
 }
+function hasValidCode(dicArr, code) {
+  if (!code) return false
+  const normalized = pad2(code)
+  return (dicArr || []).some((item) => item.cod === normalized)
+}
 function descargarBlobDirecto(blob, nombre) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -124,6 +130,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [currentSku, setCurrentSku] = useState('')
   const [evaluarOrder, setEvaluarOrder] = useState([])
   const [evaluarNotice, setEvaluarNotice] = useState('')
+  const [missingItems, setMissingItems] = useState([])
+  const [missingLoading, setMissingLoading] = useState(false)
+  const [missingError, setMissingError] = useState('')
 
   // Filtros por columna (client-side)
   const [fSKU, setFSKU] = useState('')
@@ -167,11 +176,31 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     setSeleccion(sel => sel.filter(id => (acts.items || []).some(a => a.id === id)))
   }
 
+  async function loadMissingItems() {
+    if (!authOK || !campaniaId) return
+    try {
+      setMissingLoading(true)
+      setMissingError('')
+      const data = await getMissingMaestro(Number(campaniaId))
+      setMissingItems(data.items || [])
+    } catch (e) {
+      setMissingError(e?.message || 'No se pudieron cargar los artículos faltantes en maestro.')
+    } finally {
+      setMissingLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!authOK || !campaniaId) return
     cargar().catch(e => console.error('[Revisiones] cargar error', e))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaniaId, authOK, colaEstado, colaArchivada, soloDif, consenso, sku])
+
+  useEffect(() => {
+    if (activeTab !== 'export') return
+    loadMissingItems()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, campaniaId, authOK])
 
   useEffect(() => () => {
     if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
@@ -273,6 +302,14 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     if (nextItem?.sku) scrollToSku(nextItem.sku)
   }
 
+  function isMissingItemValid(item) {
+    return (
+      hasValidCode(dic?.categorias, item?.categoria_cod) &&
+      hasValidCode(dic?.tipos, item?.tipo_cod) &&
+      hasValidCode(dic?.clasif, item?.clasif_cod)
+    )
+  }
+
   // ===== Acciones tarjetas =====
   async function onDecideAttribute(sku, field, code, decision) {
     const propuesta = { [field]: code }
@@ -313,6 +350,46 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     await cargar()
     if (sku) setLastActionSku(sku)
     setCurrentSku(sku)
+  }
+
+  function mapMissingItem(item) {
+    return {
+      sku: String(item?.sku || '').trim().toUpperCase(),
+      categoria_cod: pad2(item?.categoria_cod),
+      tipo_cod: pad2(item?.tipo_cod),
+      clasif_cod: pad2(item?.clasif_cod),
+    }
+  }
+
+  async function onAddMissingItems(itemsToAdd) {
+    const payload = (itemsToAdd || [])
+      .filter(isMissingItemValid)
+      .map(mapMissingItem)
+      .filter((item) => item.sku)
+    if (!payload.length) {
+      setToast({
+        show: true,
+        variant: 'warning',
+        message: 'No hay artículos válidos para agregar al maestro.'
+      })
+      return
+    }
+    try {
+      await importarMaestroJSON(payload)
+      setToast({
+        show: true,
+        variant: 'success',
+        message: `Se agregaron ${payload.length} artículos al maestro.`
+      })
+      await loadMissingItems()
+      await cargar()
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudieron agregar los artículos al maestro.'
+      })
+    }
   }
 
   // ===== Acciones cola (masivas) =====
@@ -941,14 +1018,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
 
               <div className="d-flex align-items-center gap-2 flex-wrap">
                 <Dropdown as={ButtonGroup}>
-                  <Button variant="primary" disabled={!authOK || !seleccion.length} onClick={onAplicarSeleccion}>
-                    Confirmar y aplicar seleccionadas (impacta maestro)
-                  </Button>
                   <Button
-                    variant="outline-primary"
+                    variant="primary"
                     onClick={() => setActiveTab('export')}
                   >
-                    Ir a Paso 3
+                    Ir a Paso 3 (Exportar)
                   </Button>
                   <Dropdown.Toggle split variant="outline-secondary" />
                   <Dropdown.Menu align="end">
@@ -1197,6 +1271,116 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                       {!seleccion.length && (
                         <div className="text-muted small mt-2">
                           Seleccioná filas en Decidir para habilitar estas exportaciones.
+                        </div>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={4}>
+                  <Card className="h-100">
+                    <Card.Body>
+                      <h6>Aplicar a Maestro</h6>
+                      <p className="text-muted small">
+                        Aplica los cambios seleccionados desde Decidir al Maestro. No se aplica automáticamente en la pestaña Decidir.
+                      </p>
+                      <Button
+                        variant="success"
+                        disabled={!authOK || !seleccion.length}
+                        onClick={onAplicarSeleccion}
+                      >
+                        Aplicar seleccionadas al Maestro
+                      </Button>
+                      {!seleccion.length && (
+                        <div className="text-muted small mt-2">
+                          Seleccioná decisiones en Decidir para aplicar al Maestro.
+                        </div>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={12}>
+                  <Card className="border-0 shadow-sm">
+                    <Card.Body>
+                      <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div>
+                          <div className="fw-semibold">Artículos no presentes en Maestro</div>
+                          <div className="text-muted small">
+                            Podés agregarlos si tienen categoría, tipo y clasificación válidos.
+                          </div>
+                        </div>
+                        <div className="d-flex gap-2">
+                          <Button
+                            variant="outline-secondary"
+                            onClick={loadMissingItems}
+                            disabled={!authOK || missingLoading}
+                          >
+                            {missingLoading ? 'Cargando…' : 'Actualizar'}
+                          </Button>
+                          <Button
+                            variant="primary"
+                            onClick={() => onAddMissingItems(missingItems)}
+                            disabled={!authOK || missingLoading || !missingItems.length}
+                          >
+                            Agregar válidos al Maestro
+                          </Button>
+                        </div>
+                      </div>
+                      {missingError && (
+                        <Alert variant="danger" className="mt-3 mb-0">
+                          {missingError}
+                        </Alert>
+                      )}
+                      {!missingError && (
+                        <div className="table-responsive mt-3">
+                          <Table size="sm" bordered>
+                            <thead>
+                              <tr>
+                                <th>SKU</th>
+                                <th>Categoría</th>
+                                <th>Tipo</th>
+                                <th>Clasificación</th>
+                                <th>Estado</th>
+                                <th></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {missingItems.map((item) => {
+                                const isValid = isMissingItemValid(item)
+                                return (
+                                  <tr key={item.sku}>
+                                    <td>{item.sku}</td>
+                                    <td>{etiqueta(dic?.categorias, item.categoria_cod)}</td>
+                                    <td>{etiqueta(dic?.tipos, item.tipo_cod)}</td>
+                                    <td>{etiqueta(dic?.clasif, item.clasif_cod)}</td>
+                                    <td>
+                                      {isValid ? (
+                                        <Badge bg="success">Válido</Badge>
+                                      ) : (
+                                        <Badge bg="secondary">Incompleto</Badge>
+                                      )}
+                                    </td>
+                                    <td className="text-end">
+                                      <Button
+                                        size="sm"
+                                        variant="outline-primary"
+                                        onClick={() => onAddMissingItems([item])}
+                                        disabled={!authOK || !isValid}
+                                      >
+                                        Agregar
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                              {!missingItems.length && !missingLoading && (
+                                <tr>
+                                  <td colSpan={6} className="text-center text-muted">
+                                    No hay artículos pendientes de agregar al Maestro.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </Table>
                         </div>
                       )}
                     </Card.Body>
