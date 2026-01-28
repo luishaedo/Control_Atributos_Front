@@ -622,8 +622,8 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                     <Col md={7}>
                       <h6 className="mb-3">Propuestas por atributo</h6>
                       {(['categoria_cod', 'tipo_cod', 'clasif_cod']).map((field) => {
-                        const acceptedCode = getAcceptedAttributeCode(it.propsFiltradas, field)
-                        const meta = buildAttributeOptions(it.propsFiltradas, field)
+                        const acceptedCode = getAcceptedAttributeCode(it.propuestas, field)
+                        const meta = buildAttributeOptions(it.propuestas, field)
                         const visibleOptions = acceptedCode
                           ? meta.options.filter((opt) => opt.code === acceptedCode)
                           : meta.options
