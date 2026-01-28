@@ -280,8 +280,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   }
 
   // ===== Acciones cola (fila) =====
-  async function onUndoRow(id) {
-    await undoActualizacion(id)
+  async function onUndoRow(item) {
+    if (!item?.id) return
+    await undoActualizacion(item.id)
     if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
     setUiMessage({
       variant: 'info',
@@ -292,6 +293,8 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       messageTimeoutRef.current = null
     }, 4000)
     await cargar()
+    if (item?.sku) setLastActionSku(item.sku)
+    setActiveTab('revisiones')
   }
   async function onRevertRow(id) {
     await revertirActualizacion(id)
@@ -702,7 +705,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                     {badgeDecision(p.decision.estado)}
                                     {p.decision.estado !== 'aplicada' && (
                                       <Button size="sm" variant="outline-secondary"
-                                              onClick={()=>onUndoRow(p.decision.id)} disabled={!authOK}>
+                                              onClick={()=>onUndoRow({ id: p.decision.id, sku: it.sku })} disabled={!authOK}>
                                         Deshacer
                                       </Button>
                                     )}
@@ -895,7 +898,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                           <div className="mt-3 d-flex flex-wrap gap-2">
                             {a.estado !== 'aplicada' ? (
                               <Button size="sm" variant="outline-secondary"
-                                      onClick={()=>onUndoRow(a.id)} disabled={!authOK}>
+                                      onClick={()=>onUndoRow(a)} disabled={!authOK}>
                                 Deshacer
                               </Button>
                             ) : (
