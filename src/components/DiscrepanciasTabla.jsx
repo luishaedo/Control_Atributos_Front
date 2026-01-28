@@ -67,7 +67,7 @@ export default function DiscrepanciasTabla({ data = [], loading, onExportCSV, ex
                   </td>
                   <td>{it.totalVotos || 0}</td>
                   <td><MiniChips items={it.sucursales || []} emptyLabel="—" /></td>
-                  <td>{fmtDate(it.updatedAt || it.createdAt)}</td>
+                  <td>{fmtDate(it.updatedAt)}</td>
                 </tr>
               )
             })}
