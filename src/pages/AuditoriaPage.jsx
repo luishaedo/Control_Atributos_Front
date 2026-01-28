@@ -82,43 +82,58 @@ export default function AuditoriaPage({ adminToken = '' }) {
   }), [dataM, dataS])
 
   return (
-    <div className="container py-3">
-      <div className="d-flex align-items-end gap-2 flex-wrap mb-3">
-        <div className="d-flex align-items-center gap-2 mb-3">
-  <button className="btn btn-light border" onClick={() => navigate('/admin')}>
-    ← Volver al Admin
-  </button>
-  <h5 className="mb-0">Auditoría</h5>
-</div>
+    <div className="container py-4">
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
         <div>
-          <label className="form-label mb-1">Campaña</label>
-          <div className="d-flex gap-2">
-            <input className="form-control" placeholder="ID de campaña"
-              value={campaniaId} onChange={e=>setCampaniaId(e.target.value)} style={{ width: 200 }}/>
-            <select className="form-select" value={campaniaId} onChange={e=>setCampaniaId(e.target.value)} style={{ width: 260 }}>
-              <option value="">Elegir activa o por ID…</option>
-              {campanias.map(c => <option key={c.id} value={c.id}>{c.id} — {c.nombre}{c.activa ? ' (activa)' : ''}</option>)}
-            </select>
+          <button className="btn btn-light border mb-2" onClick={() => navigate('/admin')}>
+            ← Volver al Admin
+          </button>
+          <h4 className="mb-1">Auditoría</h4>
+          <p className="text-muted mb-0">
+            Monitoreá discrepancias versus Maestro y conflictos entre sucursales para una campaña específica.
+          </p>
+        </div>
+        <div className="d-flex align-items-center gap-2">
+          <button className="btn btn-primary" disabled={loading} onClick={fetchData}>
+            {loading ? 'Cargando…' : 'Actualizar'}
+          </button>
+        </div>
+      </div>
+
+      <div className="card border-0 shadow-sm mb-3">
+        <div className="card-body">
+          <div className="row g-3 align-items-end">
+            <div className="col-md-5">
+              <label className="form-label mb-1">Campaña</label>
+              <div className="d-flex gap-2 flex-wrap">
+                <input className="form-control" placeholder="ID de campaña"
+                  value={campaniaId} onChange={e=>setCampaniaId(e.target.value)} />
+                <select className="form-select" value={campaniaId} onChange={e=>setCampaniaId(e.target.value)}>
+                  <option value="">Elegir activa o por ID…</option>
+                  {campanias.map(c => <option key={c.id} value={c.id}>{c.id} — {c.nombre}{c.activa ? ' (activa)' : ''}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="col-md-3">
+              <label className="form-label mb-1">SKU (opcional)</label>
+              <input className="form-control" placeholder="Buscar SKU"
+                value={sku} onChange={e=>setSku(e.target.value)} />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label mb-1">Min. votos (Maestro)</label>
+              <input type="number" min={1} className="form-control"
+                value={minVotos} onChange={e=>setMinVotos(Number(e.target.value||1))} />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label mb-1">Min. sucursales</label>
+              <input type="number" min={2} className="form-control"
+                value={minSucursales} onChange={e=>setMinSucursales(Number(e.target.value||2))} />
+            </div>
+          </div>
+          <div className="alert alert-info py-2 mt-3 mb-0">
+            Usá estos filtros para detectar dónde hay discrepancias y definir prioridades de revisión.
           </div>
         </div>
-        <div>
-          <label className="form-label mb-1">SKU (opcional)</label>
-          <input className="form-control" placeholder="Buscar SKU"
-            value={sku} onChange={e=>setSku(e.target.value)} style={{ width: 220 }}/>
-        </div>
-        <div>
-          <label className="form-label mb-1">Min. votos (Maestro)</label>
-          <input type="number" min={1} className="form-control"
-            value={minVotos} onChange={e=>setMinVotos(Number(e.target.value||1))} style={{ width: 140 }}/>
-        </div>
-        <div>
-          <label className="form-label mb-1">Min. sucursales</label>
-          <input type="number" min={2} className="form-control"
-            value={minSucursales} onChange={e=>setMinSucursales(Number(e.target.value||2))} style={{ width: 160 }}/>
-        </div>
-        <button className="btn btn-primary ms-auto" disabled={loading} onClick={fetchData}>
-          {loading ? 'Cargando…' : 'Actualizar'}
-        </button>
       </div>
 
       {error && <div className="alert alert-warning py-2">{error}</div>}
