@@ -112,6 +112,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [showArchiveModal, setShowArchiveModal] = useState(false)
   const [archiveLoading, setArchiveLoading] = useState(false)
   const [lastExportKind, setLastExportKind] = useState('')
+  const [lastActionSku, setLastActionSku] = useState('')
 
   // Filtros por columna (client-side)
   const [fSKU, setFSKU] = useState('')
@@ -125,6 +126,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [fDecideBy, setFDecideBy] = useState('')
 
   const colaRef = useRef(null)
+  const cardRefs = useRef(new Map())
 
   // ===== Carga diccionarios =====
   useEffect(() => { getDictionaries().then(setDic).catch(()=>{}) }, [])
@@ -164,6 +166,41 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
   }, [])
 
+  const evaluarItems = useMemo(() => (
+    (items || [])
+      .map((it) => ({
+        ...it,
+        propsFiltradas: it.propuestas.filter(filtrarPropuestas),
+      }))
+      .filter((it) => it.propsFiltradas.length > 0)
+  ), [items, filtroDecision])
+
+  const itemIndexBySku = useMemo(() => {
+    const map = new Map()
+    ;(items || []).forEach((it, idx) => map.set(it.sku, idx))
+    return map
+  }, [items])
+
+  useEffect(() => {
+    if (!lastActionSku || activeTab !== 'revisiones') return
+    if (!evaluarItems.length) return
+
+    let targetSku = lastActionSku
+    const sameSkuItem = evaluarItems.find((it) => it.sku === lastActionSku)
+    if (!sameSkuItem) {
+      const lastIndex = itemIndexBySku.get(lastActionSku)
+      const nextItem = evaluarItems.find((it) => {
+        const idx = itemIndexBySku.get(it.sku)
+        return idx !== undefined && lastIndex !== undefined && idx > lastIndex
+      })
+      targetSku = nextItem?.sku || evaluarItems[0].sku
+    }
+
+    const node = cardRefs.current.get(targetSku)
+    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setLastActionSku('')
+  }, [activeTab, evaluarItems, itemIndexBySku, lastActionSku])
+
   // ===== Acciones tarjetas =====
   async function onAceptar(sku, prop) {
     await decidirRevision({
@@ -172,9 +209,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       decidedBy: 'admin@local', aplicarAhora: false
     })
     await cargar()
-    // al aceptar, puede interesar saltar a la cola
-    setActiveTab('cola')
-    setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 60)
+    setLastActionSku(sku)
   }
   async function onDecideAttribute(sku, field, code, decision) {
     const propuesta = { [field]: code }
@@ -187,8 +222,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       aplicarAhora: false
     })
     await cargar()
-    setActiveTab('cola')
-    setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 60)
+    setLastActionSku(sku)
   }
   async function onRechazar(sku, prop) {
     await decidirRevision({
@@ -197,8 +231,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       decidedBy: 'admin@local'
     })
     await cargar()
-    setActiveTab('cola')
-    setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 60)
+    setLastActionSku(sku)
   }
 
   // ===== Acciones cola (masivas) =====
@@ -546,13 +579,18 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           </div>
 
           {/* TARJETAS */}
-          {items.map(it => {
-            const propsFiltradas = it.propuestas.filter(filtrarPropuestas)
-            if (!propsFiltradas.length) return null
+          {evaluarItems.map(it => {
             const borde = it.hayConsenso ? 'border-success' : 'border-warning'
             const bordeWidth = 'border-start border-4'
             return (
-              <Card key={it.sku} className={`mb-3 ${bordeWidth} ${borde}`}>
+              <Card
+                key={it.sku}
+                ref={(node) => {
+                  if (node) cardRefs.current.set(it.sku, node)
+                  else cardRefs.current.delete(it.sku)
+                }}
+                className={`mb-3 ${bordeWidth} ${borde}`}
+              >
                 <Card.Header className="d-flex justify-content-between align-items-center">
                   <div className="d-flex align-items-center gap-3">
                     <strong>{it.sku}</strong>
@@ -577,7 +615,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                     <Col md={7}>
                       <h6 className="mb-3">Propuestas por atributo</h6>
                       {(['categoria_cod', 'tipo_cod', 'clasif_cod']).map((field) => {
-                        const meta = buildAttributeOptions(propsFiltradas, field)
+                        const meta = buildAttributeOptions(it.propsFiltradas, field)
                         const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
                         if (!meta.options.length) return null
                         return (
@@ -632,7 +670,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                         )
                       })}
                       <h6 className="mt-4">Propuestas completas</h6>
-                      {propsFiltradas.map((p, idx) => (
+                      {it.propsFiltradas.map((p, idx) => (
                         <Card key={idx} className="mb-2">
                           <Card.Body>
                             <div className="d-flex justify-content-between align-items-center">
