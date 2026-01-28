@@ -81,6 +81,10 @@ function getAcceptedAttributeCode(propuestas = [], field) {
   const accepted = propuestas.find((p) => p?.decision && p?.decision?.estado !== 'rechazada' && p?.[field])
   return accepted?.[field] || ''
 }
+function getAcceptedAttributeDecision(propuestas = [], field) {
+  const accepted = propuestas.find((p) => p?.decision && p?.decision?.estado !== 'rechazada' && p?.[field])
+  return accepted?.decision || null
+}
 function descargarBlobDirecto(blob, nombre) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -117,6 +121,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [archiveLoading, setArchiveLoading] = useState(false)
   const [lastExportKind, setLastExportKind] = useState('')
   const [lastActionSku, setLastActionSku] = useState('')
+  const [currentSku, setCurrentSku] = useState('')
+  const [evaluarOrder, setEvaluarOrder] = useState([])
+  const [evaluarNotice, setEvaluarNotice] = useState('')
 
   // Filtros por columna (client-side)
   const [fSKU, setFSKU] = useState('')
@@ -179,42 +186,94 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       .filter((it) => it.propsFiltradas.length > 0)
   ), [items, filtroDecision])
 
-  const itemIndexBySku = useMemo(() => {
-    const map = new Map()
-    ;(items || []).forEach((it, idx) => map.set(it.sku, idx))
-    return map
-  }, [items])
+  useEffect(() => {
+    setEvaluarOrder((prev) => {
+      const skus = evaluarItems.map((it) => it.sku)
+      const kept = prev.filter((sku) => skus.includes(sku))
+      const missing = skus.filter((sku) => !kept.includes(sku))
+      return [...kept, ...missing]
+    })
+  }, [evaluarItems])
+
+  const orderedEvaluarItems = useMemo(() => {
+    if (!evaluarOrder.length) return evaluarItems
+    const map = new Map(evaluarItems.map((it) => [it.sku, it]))
+    const ordered = evaluarOrder.map((sku) => map.get(sku)).filter(Boolean)
+    const remaining = evaluarItems.filter((it) => !evaluarOrder.includes(it.sku))
+    return [...ordered, ...remaining]
+  }, [evaluarItems, evaluarOrder])
+
+  useEffect(() => {
+    if (orderedEvaluarItems.length) setEvaluarNotice('')
+  }, [orderedEvaluarItems.length])
 
   useEffect(() => {
     if (!lastActionSku || activeTab !== 'revisiones') return
-    if (!evaluarItems.length) return
+    if (!orderedEvaluarItems.length) return
 
     let targetSku = lastActionSku
-    const sameSkuItem = evaluarItems.find((it) => it.sku === lastActionSku)
-    if (!sameSkuItem) {
-      const lastIndex = itemIndexBySku.get(lastActionSku)
-      const nextItem = evaluarItems.find((it) => {
-        const idx = itemIndexBySku.get(it.sku)
-        return idx !== undefined && lastIndex !== undefined && idx > lastIndex
-      })
-      targetSku = nextItem?.sku || evaluarItems[0].sku
+    const sameSkuIndex = orderedEvaluarItems.findIndex((it) => it.sku === lastActionSku)
+    if (sameSkuIndex === -1) {
+      targetSku = orderedEvaluarItems[0].sku
     }
 
     const node = cardRefs.current.get(targetSku)
     if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' })
     setLastActionSku('')
-  }, [activeTab, evaluarItems, itemIndexBySku, lastActionSku])
+  }, [activeTab, orderedEvaluarItems, lastActionSku])
+
+  function scrollToSku(targetSku) {
+    const node = cardRefs.current.get(targetSku)
+    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function resolveCurrentSku() {
+    if (currentSku && orderedEvaluarItems.some((it) => it.sku === currentSku)) {
+      return currentSku
+    }
+    return orderedEvaluarItems[0]?.sku || ''
+  }
+
+  function onNextEvaluar() {
+    if (!orderedEvaluarItems.length) {
+      setEvaluarNotice('No hay pendientes para evaluar.')
+      return
+    }
+    const skuToUse = resolveCurrentSku()
+    const currentIndex = orderedEvaluarItems.findIndex((it) => it.sku === skuToUse)
+    const nextItem = orderedEvaluarItems[currentIndex + 1] || null
+    if (!nextItem) {
+      setEvaluarNotice('No hay más pendientes para evaluar.')
+      return
+    }
+    setCurrentSku(nextItem.sku)
+    setEvaluarNotice('')
+    scrollToSku(nextItem.sku)
+  }
+
+  function onPostponeEvaluar() {
+    if (!orderedEvaluarItems.length) {
+      setEvaluarNotice('No hay pendientes para evaluar.')
+      return
+    }
+    const skuToUse = resolveCurrentSku()
+    if (!skuToUse) return
+    setEvaluarOrder((prev) => {
+      const without = prev.filter((sku) => sku !== skuToUse)
+      return [...without, skuToUse]
+    })
+    const currentIndex = orderedEvaluarItems.findIndex((it) => it.sku === skuToUse)
+    const nextItem = orderedEvaluarItems[currentIndex + 1] || orderedEvaluarItems[0]
+    if (nextItem?.sku === skuToUse) {
+      setEvaluarNotice('No hay más pendientes para evaluar.')
+      return
+    }
+    setCurrentSku(nextItem?.sku || '')
+    setEvaluarNotice('')
+    if (nextItem?.sku) scrollToSku(nextItem.sku)
+  }
 
   // ===== Acciones tarjetas =====
-  async function onAceptar(sku, prop) {
-    await decidirRevision({
-      campaniaId: Number(campaniaId), sku,
-      propuesta: prop, decision: 'aceptar',
-      decidedBy: 'admin@local', aplicarAhora: false
-    })
-    await cargar()
-    setLastActionSku(sku)
-  }
   async function onDecideAttribute(sku, field, code, decision) {
     const propuesta = { [field]: code }
     await decidirRevision({
@@ -227,6 +286,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     })
     await cargar()
     setLastActionSku(sku)
+    setCurrentSku(sku)
   }
   async function onRechazar(sku, prop) {
     await decidirRevision({
@@ -236,6 +296,23 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     })
     await cargar()
     setLastActionSku(sku)
+    setCurrentSku(sku)
+  }
+  async function onUndoAttributeDecision(decisionId, sku) {
+    if (!decisionId) return
+    await undoActualizacion(decisionId)
+    if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
+    setUiMessage({
+      variant: 'info',
+      text: 'Decisión deshecha. Quedó como pendiente nuevamente.'
+    })
+    messageTimeoutRef.current = setTimeout(() => {
+      setUiMessage(null)
+      messageTimeoutRef.current = null
+    }, 4000)
+    await cargar()
+    if (sku) setLastActionSku(sku)
+    setCurrentSku(sku)
   }
 
   // ===== Acciones cola (masivas) =====
@@ -294,6 +371,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     }, 4000)
     await cargar()
     if (item?.sku) setLastActionSku(item.sku)
+    if (item?.sku) setCurrentSku(item.sku)
     setActiveTab('revisiones')
   }
   async function onRevertRow(id) {
@@ -557,7 +635,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       <Tabs activeKey={activeTab} onSelect={k => setActiveTab(k || 'revisiones')} className="mb-3">
         {/* ====== TAB: Revisiones (tarjetas) ====== */}
         <Tab eventKey="revisiones" title="Evaluar">
-          <div className="d-flex justify-content-between align-items-center mb-2">
+          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
             <ButtonGroup>
               <Button variant={filtroDecision==='pendientes' ? 'primary' : 'outline-primary'}
                       onClick={()=>setFiltroDecision('pendientes')}>
@@ -577,18 +655,50 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
               </Button>
             </ButtonGroup>
 
-            <Button
-              variant="outline-dark"
-              onClick={()=>{ setActiveTab('cola'); setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 60) }}
-            >
-              Ir a Paso 2 (Decidir)
-            </Button>
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <Button
+                variant="outline-secondary"
+                onClick={onPostponeEvaluar}
+                disabled={!orderedEvaluarItems.length}
+              >
+                Posponer artículo
+              </Button>
+              <Button
+                variant="outline-primary"
+                onClick={onNextEvaluar}
+                disabled={!orderedEvaluarItems.length}
+              >
+                Siguiente artículo
+              </Button>
+              <Button
+                variant="outline-dark"
+                onClick={()=>{ setActiveTab('cola'); setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 60) }}
+              >
+                Ir a Paso 2 (Decidir)
+              </Button>
+            </div>
           </div>
+          {evaluarNotice && (
+            <Alert variant="info" onClose={() => setEvaluarNotice('')} dismissible>
+              {evaluarNotice}
+            </Alert>
+          )}
+          {filtroDecision === 'pendientes' && !orderedEvaluarItems.length && (
+            <Alert variant="warning">
+              No hay pendientes a evaluar. Podés pasar manualmente a Decidir cuando quieras.
+            </Alert>
+          )}
 
           {/* TARJETAS */}
-          {evaluarItems.map(it => {
+          {orderedEvaluarItems.map(it => {
             const borde = it.hayConsenso ? 'border-success' : 'border-warning'
             const bordeWidth = 'border-start border-4'
+            const acceptedCategoriaCode = getAcceptedAttributeCode(it.propuestas, 'categoria_cod')
+            const acceptedTipoCode = getAcceptedAttributeCode(it.propuestas, 'tipo_cod')
+            const acceptedClasifCode = getAcceptedAttributeCode(it.propuestas, 'clasif_cod')
+            const acceptedCategoriaDecision = getAcceptedAttributeDecision(it.propuestas, 'categoria_cod')
+            const acceptedTipoDecision = getAcceptedAttributeDecision(it.propuestas, 'tipo_cod')
+            const acceptedClasifDecision = getAcceptedAttributeDecision(it.propuestas, 'clasif_cod')
             return (
               <Card
                 key={it.sku}
@@ -618,17 +728,68 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                           <tr><td>Clasificación</td><td>{etiqueta(dic?.clasif, it.maestro?.clasif_cod)}</td></tr>
                         </tbody>
                       </Table>
+                      <h6 className="mt-3">Aceptadas (sugerencias)</h6>
+                      <Table size="sm" bordered>
+                        <tbody>
+                          <tr>
+                            <td>Categoría</td>
+                            <td>{acceptedCategoriaCode ? etiqueta(dic?.categorias, acceptedCategoriaCode) : '—'}</td>
+                            <td className="text-end">
+                              {acceptedCategoriaDecision && acceptedCategoriaDecision.estado !== 'aplicada' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  onClick={() => onUndoAttributeDecision(acceptedCategoriaDecision.id, it.sku)}
+                                  disabled={!authOK}
+                                >
+                                  Deshacer
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Tipo</td>
+                            <td>{acceptedTipoCode ? etiqueta(dic?.tipos, acceptedTipoCode) : '—'}</td>
+                            <td className="text-end">
+                              {acceptedTipoDecision && acceptedTipoDecision.estado !== 'aplicada' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  onClick={() => onUndoAttributeDecision(acceptedTipoDecision.id, it.sku)}
+                                  disabled={!authOK}
+                                >
+                                  Deshacer
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Clasificación</td>
+                            <td>{acceptedClasifCode ? etiqueta(dic?.clasif, acceptedClasifCode) : '—'}</td>
+                            <td className="text-end">
+                              {acceptedClasifDecision && acceptedClasifDecision.estado !== 'aplicada' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  onClick={() => onUndoAttributeDecision(acceptedClasifDecision.id, it.sku)}
+                                  disabled={!authOK}
+                                >
+                                  Deshacer
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </Table>
                     </Col>
                     <Col md={7}>
                       <h6 className="mb-3">Propuestas por atributo</h6>
                       {(['categoria_cod', 'tipo_cod', 'clasif_cod']).map((field) => {
                         const acceptedCode = getAcceptedAttributeCode(it.propuestas, field)
+                        const isLocked = Boolean(acceptedCode)
                         const meta = buildAttributeOptions(it.propuestas, field)
-                        const visibleOptions = acceptedCode
-                          ? meta.options.filter((opt) => opt.code === acceptedCode)
-                          : meta.options
                         const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
-                        if (!visibleOptions.length) return null
+                        if (!meta.options.length) return null
                         return (
                           <Card key={field} className="mb-3 border-0 shadow-sm">
                             <Card.Body>
@@ -636,8 +797,13 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                 <div className="fw-semibold">{label}</div>
                                 <div className="text-muted small">{meta.total} votos</div>
                               </div>
+                              {isLocked && (
+                                <div className="text-muted small mt-1">
+                                  Deshacé la decisión para evaluar otra opción.
+                                </div>
+                              )}
                               <div className="mt-2 d-flex flex-column gap-2">
-                                {visibleOptions.map((opt) => {
+                                {meta.options.map((opt) => {
                                   const consensus = consensusLabel(opt.share)
                                   const isAccepted = Boolean(acceptedCode && opt.code === acceptedCode)
                                   return (
@@ -660,7 +826,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                             variant="outline-danger"
                                             size="sm"
                                             onClick={() => onDecideAttribute(it.sku, field, opt.code, 'rechazar')}
-                                            disabled={!authOK || isAccepted}
+                                            disabled={!authOK || isLocked}
                                           >
                                             Rechazar
                                           </Button>
@@ -668,7 +834,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                             variant="success"
                                             size="sm"
                                             onClick={() => onDecideAttribute(it.sku, field, opt.code, 'aceptar')}
-                                            disabled={!authOK || isAccepted}
+                                            disabled={!authOK || isLocked}
                                           >
                                             Aceptar
                                           </Button>
@@ -716,10 +882,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                             onClick={()=>onRechazar(it.sku, p)} disabled={!authOK}>
                                       Rechazar
                                     </Button>
-                                    <Button variant="success" size="sm"
-                                            onClick={()=>onAceptar(it.sku, p)} disabled={!authOK}>
-                                      Aceptar
-                                    </Button>
                                   </>
                                 )}
                               </div>
@@ -740,7 +902,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
               </Card>
             )
           })}
-          {!items.length && (
+          {!orderedEvaluarItems.length && (
             <Card body className="text-center text-muted">No hay resultados con los filtros actuales.</Card>
           )}
         </Tab>
