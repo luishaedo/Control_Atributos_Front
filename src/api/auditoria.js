@@ -14,7 +14,7 @@ export async function apiListCampanias() {
 
 export async function apiGetDiscrepancias({ campaniaId, sku = '', minVotos = 1, token = '' }) {
   const params = new URLSearchParams({ campaniaId: String(campaniaId), sku, minVotos: String(minVotos) });
-  const res = await fetch(`${BASE}/api/admin/revisiones/discrepancias?${params.toString()}`, {
+  const res = await fetch(`${BASE}/api/admin/discrepancias?${params.toString()}`, {
     headers: adminHeaders(token),
   });
   if (!res.ok) throw new Error(`GET discrepancias ${res.status}`);
@@ -23,7 +23,7 @@ export async function apiGetDiscrepancias({ campaniaId, sku = '', minVotos = 1, 
 
 export async function apiGetDiscrepanciasSucursales({ campaniaId, sku = '', minSucursales = 2, token = '' }) {
   const params = new URLSearchParams({ campaniaId: String(campaniaId), sku, minSucursales: String(minSucursales) });
-  const res = await fetch(`${BASE}/api/admin/revisiones/discrepancias-sucursales?${params.toString()}`, {
+  const res = await fetch(`${BASE}/api/admin/discrepancias-sucursales?${params.toString()}`, {
     headers: adminHeaders(token),
   });
   if (!res.ok) throw new Error(`GET sucursales ${res.status}`);
