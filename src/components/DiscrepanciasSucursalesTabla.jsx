@@ -11,6 +11,11 @@ function FirmaPill({ c, t, cl }) {
   )
 }
 
+function SucursalChips({ items }) {
+  if (!items || items.length === 0) return <span className="text-muted">—</span>
+  return <MiniChips items={items} max={5} emptyLabel="—" />
+}
+
 export default function DiscrepanciasSucursalesTabla({ data = [], loading }) {
   const [buscar, setBuscar] = useState('')
   const [soloConflicto, setSoloConflicto] = useState(true)
@@ -50,32 +55,29 @@ export default function DiscrepanciasSucursalesTabla({ data = [], loading }) {
                 <td className="fw-bold">{it.sku}</td>
                 <td>{it.conflicto ? <span className="badge text-bg-danger">Sí</span> : <span className="badge text-bg-success">No</span>}</td>
                 <td>
-                  <div className="d-flex flex-column gap-2">
-                    {it.sucursales.map(s => (
-                      <div key={s.sucursal} className="d-flex flex-wrap align-items-center gap-2">
-                        <span className="badge text-bg-primary">{s.sucursal || '—'}</span>
-                        <FirmaPill c={s.categoria_cod} t={s.tipo_cod} cl={s.clasif_cod} />
-                        <span className="badge text-bg-light border">votos: {s.count}</span>
-                        <MiniChips items={s.usuarios} max={3} emptyLabel="sin usuarios" />
-                      </div>
-                    ))}
-                  </div>
+                  {it.mayoritaria ? (
+                    <div className="d-flex flex-wrap align-items-center gap-2">
+                      <FirmaPill
+                        c={it.mayoritaria.categoria_cod}
+                        t={it.mayoritaria.tipo_cod}
+                        cl={it.mayoritaria.clasif_cod}
+                      />
+                      <span className="badge text-bg-light border">Sucursales:</span>
+                      <SucursalChips items={it.mayoritaria.sucursales} />
+                    </div>
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
                 </td>
                 <td>
-                  {it.sucursales.some(s => (s.variantes||[]).length) ? (
+                  {it.variantes && it.variantes.length > 0 ? (
                     <div className="small text-muted">
-                      {it.sucursales.map(s => (
-                        (s.variantes||[]).length ? (
-                          <div key={'var-'+s.sucursal} className="mb-1">
-                            <span className="me-2">{s.sucursal}:</span>
-                            {(s.variantes||[]).slice(0,2).map((v,idx)=>(
-                              <span key={idx} className="me-2">
-                                <FirmaPill c={v.categoria_cod} t={v.tipo_cod} cl={v.clasif_cod} />
-                                <span className="ms-1">({v.count})</span>
-                              </span>
-                            ))}
-                          </div>
-                        ) : null
+                      {it.variantes.map((v, idx) => (
+                        <div key={`var-${it.sku}-${idx}`} className="mb-1 d-flex flex-wrap align-items-center gap-2">
+                          <FirmaPill c={v.categoria_cod} t={v.tipo_cod} cl={v.clasif_cod} />
+                          <span className="badge text-bg-light border">Sucursales:</span>
+                          <SucursalChips items={v.sucursales} />
+                        </div>
                       ))}
                     </div>
                   ) : <span className="text-muted">—</span>}
