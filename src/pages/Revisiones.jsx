@@ -14,6 +14,7 @@ import {
   ButtonGroup,
   Tabs,
   Tab,
+  Modal,
   Toast,
   ToastContainer
 } from 'react-bootstrap'
@@ -41,6 +42,40 @@ function badgeDecision(estado) {
   if (estado === 'pendiente')  return <Badge bg="warning" text="dark">ACEPTADA (pend.)</Badge>
   if (estado === 'rechazada')  return <Badge bg="danger">RECHAZADA</Badge>
   return <Badge bg="secondary">—</Badge>
+}
+const CONSENSUS_THRESHOLD = 0.6
+function buildAttributeOptions(propuestas = [], field) {
+  const map = new Map()
+  for (const p of propuestas) {
+    const code = p?.[field]
+    if (!code) continue
+    const entry = map.get(code) || { code, count: 0, usuarios: new Set(), sucursales: new Set() }
+    entry.count += Number(p.count || 0)
+    ;(p.usuarios || []).forEach(u => entry.usuarios.add(u))
+    ;(p.sucursales || []).forEach(s => entry.sucursales.add(s))
+    map.set(code, entry)
+  }
+  const list = Array.from(map.values())
+    .sort((a, b) => b.count - a.count)
+    .map(item => ({
+      ...item,
+      usuarios: Array.from(item.usuarios),
+      sucursales: Array.from(item.sucursales),
+    }))
+  const total = list.reduce((acc, it) => acc + it.count, 0)
+  return {
+    total,
+    options: list.map(item => ({
+      ...item,
+      share: total ? item.count / total : 0
+    }))
+  }
+}
+function consensusLabel(share) {
+  const pct = Math.round(share * 100)
+  if (share >= CONSENSUS_THRESHOLD) return { text: `Consenso ${pct}%`, variant: 'success' }
+  if (share > 0) return { text: `${pct}%`, variant: 'warning' }
+  return { text: 'Sin votos', variant: 'secondary' }
 }
 function descargarBlobDirecto(blob, nombre) {
   const url = URL.createObjectURL(blob)
@@ -74,6 +109,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [colaArchivada, setColaArchivada] = useState('activas') // 'activas'|'archivadas'|'todas'
   const [exportIncludeArchived, setExportIncludeArchived] = useState(false)
   const [toast, setToast] = useState({ show: false, variant: 'success', message: '' })
+  const [showArchiveModal, setShowArchiveModal] = useState(false)
+  const [archiveLoading, setArchiveLoading] = useState(false)
+  const [lastExportKind, setLastExportKind] = useState('')
 
   // Filtros por columna (client-side)
   const [fSKU, setFSKU] = useState('')
@@ -135,6 +173,20 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     })
     await cargar()
     // al aceptar, puede interesar saltar a la cola
+    setActiveTab('cola')
+    setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 60)
+  }
+  async function onDecideAttribute(sku, field, code, decision) {
+    const propuesta = { [field]: code }
+    await decidirRevision({
+      campaniaId: Number(campaniaId),
+      sku,
+      propuesta,
+      decision,
+      decidedBy: 'admin@local',
+      aplicarAhora: false
+    })
+    await cargar()
     setActiveTab('cola')
     setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 60)
   }
@@ -209,7 +261,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
     setUiMessage({
       variant: 'warning',
-      text: 'Se creó una reversión pendiente. Aplicala desde la cola para impactar Maestro.'
+      text: 'Se creó una reversión pendiente. Aplicala desde Decidir para impactar Maestro.'
     })
     messageTimeoutRef.current = setTimeout(() => {
       setUiMessage(null)
@@ -226,18 +278,26 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   async function onExportCola() {
     const blob = await exportActualizacionesCSV(Number(campaniaId))
     descargarBlobDirecto(blob, 'actualizaciones_campania.csv')
+    setLastExportKind('CSV')
+    setShowArchiveModal(true)
   }
   async function onExportTxtCat(estado='aceptadas', incluirArchivadas=false) {
     const b = await exportTxtCategoria(Number(campaniaId), estado, incluirArchivadas)
     descargarBlobDirecto(b, `categoria_${campaniaId}_${estado}${incluirArchivadas?'_inclArch':''}.txt`)
+    setLastExportKind('TXT Categoría')
+    setShowArchiveModal(true)
   }
   async function onExportTxtTipo(estado='aceptadas', incluirArchivadas=false) {
     const b = await exportTxtTipo(Number(campaniaId), estado, incluirArchivadas)
     descargarBlobDirecto(b, `tipo_${campaniaId}_${estado}${incluirArchivadas?'_inclArch':''}.txt`)
+    setLastExportKind('TXT Tipo')
+    setShowArchiveModal(true)
   }
   async function onExportTxtClasif(estado='aceptadas', incluirArchivadas=false) {
     const b = await exportTxtClasif(Number(campaniaId), estado, incluirArchivadas)
     descargarBlobDirecto(b, `clasif_${campaniaId}_${estado}${incluirArchivadas?'_inclArch':''}.txt`)
+    setLastExportKind('TXT Clasif')
+    setShowArchiveModal(true)
   }
   function onExportTxtSeleccion(campo) {
     const mapNew = { categoria: 'new_categoria_cod', tipo: 'new_tipo_cod', clasif: 'new_clasif_cod' }
@@ -321,6 +381,46 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     setFOldTipo(''); setFNewTipo(''); setFOldCla(''); setFNewCla('')
     setFDecideBy('')
   }
+  async function onArchiveAfterExport() {
+    try {
+      setArchiveLoading(true)
+      const pendientes = await listarActualizaciones(Number(campaniaId), {
+        estado: 'pendiente',
+        archivada: 'false'
+      })
+      const ids = (pendientes.items || []).map(a => a.id)
+      if (!ids.length) {
+        setToast({
+          show: true,
+          variant: 'info',
+          message: 'No hay decisiones pendientes para archivar.'
+        })
+        setShowArchiveModal(false)
+        return
+      }
+      await archivarActualizaciones(ids, true, 'export-archive')
+      setToast({
+        show: true,
+        variant: 'success',
+        message: `Se archivaron ${ids.length} decisiones pendientes.`
+      })
+      await cargar()
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo archivar después de exportar.'
+      })
+    } finally {
+      setArchiveLoading(false)
+      setShowArchiveModal(false)
+    }
+  }
+  function onViewArchived() {
+    setColaArchivada('archivadas')
+    setActiveTab('cola')
+    setTimeout(() => colaRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
+  }
 
   // ===== UI =====
   return (
@@ -330,7 +430,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           <div>
             <div className="fw-semibold">Flujo guiado</div>
             <div className="text-muted small">
-              Paso 1: evaluá discrepancias, Paso 2: confirmá decisiones en la cola, Paso 3: exportá resultados.
+              Paso 1: evaluá discrepancias, Paso 2: decidí y confirmá, Paso 3: exportá resultados.
             </div>
           </div>
           <ButtonGroup aria-label="Wizard steps">
@@ -368,7 +468,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           autohide
         >
           <Toast.Header>
-            <strong className="me-auto">Cola</strong>
+            <strong className="me-auto">Decidir</strong>
           </Toast.Header>
           <Toast.Body className={toast.variant === 'warning' ? 'text-dark' : 'text-white'}>
             {toast.message}
@@ -416,7 +516,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
 
       <Tabs activeKey={activeTab} onSelect={k => setActiveTab(k || 'revisiones')} className="mb-3">
         {/* ====== TAB: Revisiones (tarjetas) ====== */}
-        <Tab eventKey="revisiones" title="Revisiones">
+        <Tab eventKey="revisiones" title="Evaluar">
           <div className="d-flex justify-content-between align-items-center mb-2">
             <ButtonGroup>
               <Button variant={filtroDecision==='pendientes' ? 'primary' : 'outline-primary'}
@@ -441,7 +541,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
               variant="outline-dark"
               onClick={()=>{ setActiveTab('cola'); setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 60) }}
             >
-              Ir a Paso 2 (Cola)
+              Ir a Paso 2 (Decidir)
             </Button>
           </div>
 
@@ -475,7 +575,63 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                       </Table>
                     </Col>
                     <Col md={7}>
-                      <h6>Propuestas de usuarios</h6>
+                      <h6 className="mb-3">Propuestas por atributo</h6>
+                      {(['categoria_cod', 'tipo_cod', 'clasif_cod']).map((field) => {
+                        const meta = buildAttributeOptions(propsFiltradas, field)
+                        const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
+                        if (!meta.options.length) return null
+                        return (
+                          <Card key={field} className="mb-3 border-0 shadow-sm">
+                            <Card.Body>
+                              <div className="d-flex align-items-center justify-content-between">
+                                <div className="fw-semibold">{label}</div>
+                                <div className="text-muted small">{meta.total} votos</div>
+                              </div>
+                              <div className="mt-2 d-flex flex-column gap-2">
+                                {meta.options.map((opt) => {
+                                  const consensus = consensusLabel(opt.share)
+                                  return (
+                                    <div key={`${field}-${opt.code}`} className="border rounded p-2">
+                                      <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                                        <div>
+                                          <div className="fw-semibold">{etiqueta(dic?.[field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'], opt.code)}</div>
+                                          <div className="small text-muted">
+                                            {opt.count} votos ·
+                                            <Badge bg={consensus.variant} className="ms-2">{consensus.text}</Badge>
+                                          </div>
+                                          <Stack direction="horizontal" gap={2} className="mt-1 flex-wrap">
+                                            {opt.usuarios.map(u => <Badge bg="secondary" key={`${field}-${opt.code}-${u}`}>{u}</Badge>)}
+                                            {opt.sucursales.map(s => <Badge bg="info" key={`${field}-${opt.code}-${s}`}>{s}</Badge>)}
+                                          </Stack>
+                                        </div>
+                                        <div className="d-flex align-items-center gap-2">
+                                          <Button
+                                            variant="outline-danger"
+                                            size="sm"
+                                            onClick={() => onDecideAttribute(it.sku, field, opt.code, 'rechazar')}
+                                            disabled={!authOK}
+                                          >
+                                            Rechazar
+                                          </Button>
+                                          <Button
+                                            variant="success"
+                                            size="sm"
+                                            onClick={() => onDecideAttribute(it.sku, field, opt.code, 'aceptar')}
+                                            disabled={!authOK}
+                                          >
+                                            Aceptar
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </Card.Body>
+                          </Card>
+                        )
+                      })}
+                      <h6 className="mt-4">Propuestas completas</h6>
                       {propsFiltradas.map((p, idx) => (
                         <Card key={idx} className="mb-2">
                           <Card.Body>
@@ -539,12 +695,12 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
         </Tab>
 
         {/* ====== TAB: Cola ====== */}
-        <Tab eventKey="cola" title="Cola">
+        <Tab eventKey="cola" title="Decidir">
           <div ref={colaRef} />
           <Card>
             <Card.Header className="d-flex flex-wrap gap-2 justify-content-between align-items-center">
               <div className="d-flex gap-2 align-items-center flex-wrap">
-                <strong>Cola de actualizaciones</strong>
+                <strong>Decisiones pendientes y aplicadas</strong>
 
                 <Form.Select
                   size="sm" value={colaEstado} onChange={e=>setColaEstado(e.target.value)}
@@ -598,106 +754,125 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                   {uiMessage.text}
                 </Alert>
               )}
-              <Table size="sm" bordered hover className="align-middle">
-                <thead>
-                  <tr>
-                    <th style={{width: 32}}>
-                      <Form.Check
-                        type="checkbox"
-                        checked={allVisibleSelected}
-                        onChange={toggleSelAllVisible}
-                        title="Seleccionar todo (filtrado)"
-                      />
-                    </th>
-                    <th>Estado</th>
-                    <th>SKU</th>
-                    <th>Old Cat</th><th>New Cat</th>
-                    <th>Old Tipo</th><th>New Tipo</th>
-                    <th>Old Clasif</th><th>New Clasif</th>
-                    <th>Decidido por</th>
-                    <th>Decidido en</th>
-                    <th style={{width: 190}}>Acciones</th>
-                  </tr>
-                  {/* filtros por columna */}
-                  <tr>
-                    <th>
-                      <Button size="sm" variant="outline-secondary" onClick={limpiarFiltrosCola}>Limpiar</Button>
-                    </th>
-                    <th>
-                      <Form.Select size="sm" value={fEstado} onChange={e=>setFEstado(e.target.value)}>
-                        <option value="">—</option>
-                        <option value="pendiente">Pendiente</option>
-                        <option value="aplicada">Aplicada</option>
-                        <option value="rechazada">Rechazada</option>
-                      </Form.Select>
-                    </th>
-                    <th><Form.Control size="sm" value={fSKU} onChange={e=>setFSKU(e.target.value)} placeholder="SKU" /></th>
-                    <th><Form.Control size="sm" value={fOldCat} onChange={e=>setFOldCat(e.target.value)} placeholder="Old cat" /></th>
-                    <th><Form.Control size="sm" value={fNewCat} onChange={e=>setFNewCat(e.target.value)} placeholder="New cat" /></th>
-                    <th><Form.Control size="sm" value={fOldTipo} onChange={e=>setFOldTipo(e.target.value)} placeholder="Old tipo" /></th>
-                    <th><Form.Control size="sm" value={fNewTipo} onChange={e=>setFNewTipo(e.target.value)} placeholder="New tipo" /></th>
-                    <th><Form.Control size="sm" value={fOldCla} onChange={e=>setFOldCla(e.target.value)} placeholder="Old clasif" /></th>
-                    <th><Form.Control size="sm" value={fNewCla} onChange={e=>setFNewCla(e.target.value)} placeholder="New clasif" /></th>
-                    <th><Form.Control size="sm" value={fDecideBy} onChange={e=>setFDecideBy(e.target.value)} placeholder="email" /></th>
-                    <th />
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {colaFiltrada.map(a => {
-                    const rowClass =
-                      a.archivada ? 'table-secondary' :
-                      (a.estado === 'aplicada' ? 'table-success'
-                        : a.estado === 'pendiente' ? 'table-warning'
-                        : a.estado === 'rechazada' ? 'table-danger' : '')
-                    return (
-                      <tr key={a.id} className={rowClass}>
-                        <td>
-                          <Form.Check
-                            type="checkbox"
-                            checked={seleccion.includes(a.id)}
-                            onChange={()=>toggleSel(a.id)}
-                          />
-                        </td>
-                        <td>
-                          {badgeDecision(a.estado)}
-                          {a.archivada && <Badge bg="secondary" className="ms-1">Archivada</Badge>}
-                        </td>
-                        <td>{a.sku}</td>
-                        <td>{etiqueta(dic?.categorias, a.old_categoria_cod)}</td>
-                        <td>{etiqueta(dic?.categorias, a.new_categoria_cod)}</td>
-                        <td>{etiqueta(dic?.tipos, a.old_tipo_cod)}</td>
-                        <td>{etiqueta(dic?.tipos, a.new_tipo_cod)}</td>
-                        <td>{etiqueta(dic?.clasif, a.old_clasif_cod)}</td>
-                        <td>{etiqueta(dic?.clasif, a.new_clasif_cod)}</td>
-                        <td>{a.decidedBy || '—'}</td>
-                        <td>{a.decidedAt ? new Date(a.decidedAt).toLocaleString() : '—'}</td>
-                        <td className="text-nowrap">
-                          {a.estado !== 'aplicada' ? (
-                            <Button size="sm" variant="outline-secondary" className="me-1"
-                                    onClick={()=>onUndoRow(a.id)} disabled={!authOK}>
-                              Deshacer
+              <Card className="border-0 shadow-sm mb-3">
+                <Card.Body className="row g-2">
+                  <div className="col-md-2">
+                    <Button size="sm" variant="outline-secondary" onClick={limpiarFiltrosCola} className="w-100">
+                      Limpiar filtros
+                    </Button>
+                  </div>
+                  <div className="col-md-2">
+                    <Form.Select size="sm" value={fEstado} onChange={e=>setFEstado(e.target.value)}>
+                      <option value="">Estado</option>
+                      <option value="pendiente">Pendiente</option>
+                      <option value="aplicada">Aplicada</option>
+                      <option value="rechazada">Rechazada</option>
+                    </Form.Select>
+                  </div>
+                  <div className="col-md-2"><Form.Control size="sm" value={fSKU} onChange={e=>setFSKU(e.target.value)} placeholder="SKU" /></div>
+                  <div className="col-md-2"><Form.Control size="sm" value={fOldCat} onChange={e=>setFOldCat(e.target.value)} placeholder="Old cat" /></div>
+                  <div className="col-md-2"><Form.Control size="sm" value={fNewCat} onChange={e=>setFNewCat(e.target.value)} placeholder="New cat" /></div>
+                  <div className="col-md-2"><Form.Control size="sm" value={fDecideBy} onChange={e=>setFDecideBy(e.target.value)} placeholder="Decidido por" /></div>
+                  <div className="col-md-2"><Form.Control size="sm" value={fOldTipo} onChange={e=>setFOldTipo(e.target.value)} placeholder="Old tipo" /></div>
+                  <div className="col-md-2"><Form.Control size="sm" value={fNewTipo} onChange={e=>setFNewTipo(e.target.value)} placeholder="New tipo" /></div>
+                  <div className="col-md-2"><Form.Control size="sm" value={fOldCla} onChange={e=>setFOldCla(e.target.value)} placeholder="Old clasif" /></div>
+                  <div className="col-md-2"><Form.Control size="sm" value={fNewCla} onChange={e=>setFNewCla(e.target.value)} placeholder="New clasif" /></div>
+                </Card.Body>
+              </Card>
+
+              <div className="d-flex align-items-center gap-2 mb-2">
+                <Form.Check
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelAllVisible}
+                  label="Seleccionar visibles"
+                />
+                <small className="text-muted">Total seleccionadas: {seleccion.length}</small>
+              </div>
+
+              <Row className="g-3">
+                {colaFiltrada.map(a => {
+                  const statusVariant =
+                    a.estado === 'aplicada' ? 'success' :
+                    a.estado === 'pendiente' ? 'warning' :
+                    a.estado === 'rechazada' ? 'danger' : 'secondary'
+                  const cardClass = a.archivada ? 'border-secondary' : `border-${statusVariant}`
+                  return (
+                    <Col md={6} lg={4} key={a.id}>
+                      <Card className={`h-100 ${cardClass}`}>
+                        <Card.Body>
+                          <div className="d-flex align-items-start justify-content-between">
+                            <div>
+                              <div className="fw-semibold">{a.sku}</div>
+                              <div className="d-flex align-items-center gap-2 mt-1">
+                                {badgeDecision(a.estado)}
+                                {a.archivada && <Badge bg="secondary">Archivada</Badge>}
+                              </div>
+                            </div>
+                            <Form.Check
+                              type="checkbox"
+                              checked={seleccion.includes(a.id)}
+                              onChange={()=>toggleSel(a.id)}
+                              aria-label={`Seleccionar ${a.sku}`}
+                            />
+                          </div>
+
+                          <div className="mt-3">
+                            <div className="text-muted small">Categoría</div>
+                            <div className="d-flex justify-content-between">
+                              <span className="text-muted">{etiqueta(dic?.categorias, a.old_categoria_cod)}</span>
+                              <span className="fw-semibold">{etiqueta(dic?.categorias, a.new_categoria_cod)}</span>
+                            </div>
+                          </div>
+                          <div className="mt-2">
+                            <div className="text-muted small">Tipo</div>
+                            <div className="d-flex justify-content-between">
+                              <span className="text-muted">{etiqueta(dic?.tipos, a.old_tipo_cod)}</span>
+                              <span className="fw-semibold">{etiqueta(dic?.tipos, a.new_tipo_cod)}</span>
+                            </div>
+                          </div>
+                          <div className="mt-2">
+                            <div className="text-muted small">Clasificación</div>
+                            <div className="d-flex justify-content-between">
+                              <span className="text-muted">{etiqueta(dic?.clasif, a.old_clasif_cod)}</span>
+                              <span className="fw-semibold">{etiqueta(dic?.clasif, a.new_clasif_cod)}</span>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 small text-muted">
+                            <div>Decidido por: <span className="fw-semibold text-dark">{a.decidedBy || '—'}</span></div>
+                            <div>Decidido en: {a.decidedAt ? new Date(a.decidedAt).toLocaleString() : '—'}</div>
+                          </div>
+
+                          <div className="mt-3 d-flex flex-wrap gap-2">
+                            {a.estado !== 'aplicada' ? (
+                              <Button size="sm" variant="outline-secondary"
+                                      onClick={()=>onUndoRow(a.id)} disabled={!authOK}>
+                                Deshacer
+                              </Button>
+                            ) : (
+                              <Button size="sm" variant="outline-primary"
+                                      onClick={()=>onRevertRow(a.id)} disabled={!authOK}>
+                                Crear reversión
+                              </Button>
+                            )}
+                            <Button size="sm"
+                                    variant={a.archivada ? 'outline-dark' : 'outline-secondary'}
+                                    onClick={()=>onToggleArchiveRow(a)} disabled={!authOK}>
+                              {a.archivada ? 'Desarchivar' : 'Archivar'}
                             </Button>
-                          ) : (
-                            <Button size="sm" variant="outline-primary" className="me-1"
-                                    onClick={()=>onRevertRow(a.id)} disabled={!authOK}>
-                              Crear reversión
-                            </Button>
-                          )}
-                          <Button size="sm"
-                                  variant={a.archivada ? 'outline-dark' : 'outline-secondary'}
-                                  onClick={()=>onToggleArchiveRow(a)} disabled={!authOK}>
-                            {a.archivada ? 'Desarchivar' : 'Archivar'}
-                          </Button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  {!colaFiltrada.length && (
-                    <tr><td colSpan={12} className="text-center text-muted py-4">Sin resultados</td></tr>
-                  )}
-                </tbody>
-              </Table>
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+                  )
+                })}
+                {!colaFiltrada.length && (
+                  <Col>
+                    <Card body className="text-center text-muted">Sin resultados</Card>
+                  </Col>
+                )}
+              </Row>
             </Card.Body>
           </Card>
         </Tab>
@@ -710,12 +885,15 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                   Exportá las decisiones aceptadas para actualizar tu sistema de gestión.
                 </div>
               </div>
-              <Button
-                variant="outline-secondary"
-                onClick={() => setActiveTab('cola')}
-              >
-                Volver a Paso 2
-              </Button>
+              <div className="d-flex gap-2 align-items-center">
+                <Badge bg="light" text="dark">Campaña #{campaniaId || '—'}</Badge>
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => setActiveTab('cola')}
+                >
+                  Volver a Paso 2
+                </Button>
+              </div>
             </Card.Header>
             <Card.Body>
               <Row className="g-3">
@@ -778,7 +956,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                     <Card.Body>
                       <h6>Exportación TXT (selección actual)</h6>
                       <p className="text-muted small">
-                        Exporta sólo los SKUs seleccionados en la cola (pendientes, aplicados o rechazados).
+                        Exporta sólo los SKUs seleccionados en Decidir (pendientes, aplicados o rechazados).
                       </p>
                       <div className="d-flex flex-wrap gap-2">
                         <Button
@@ -805,9 +983,24 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                       </div>
                       {!seleccion.length && (
                         <div className="text-muted small mt-2">
-                          Seleccioná filas en la cola para habilitar estas exportaciones.
+                          Seleccioná filas en Decidir para habilitar estas exportaciones.
                         </div>
                       )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={12}>
+                  <Card className="border-0 shadow-sm">
+                    <Card.Body className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                      <div>
+                        <div className="fw-semibold">Acceso a datos archivados</div>
+                        <div className="text-muted small">
+                          Revisá el historial de decisiones archivadas de esta campaña.
+                        </div>
+                      </div>
+                      <Button variant="outline-dark" onClick={onViewArchived}>
+                        Ver archivadas en Paso 2
+                      </Button>
                     </Card.Body>
                   </Card>
                 </Col>
@@ -816,6 +1009,27 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           </Card>
         </Tab>
       </Tabs>
+      <Modal show={showArchiveModal} onHide={() => setShowArchiveModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>¿Archivar decisiones exportadas?</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">
+            Exportaste <strong>{lastExportKind || 'archivo'}</strong> de la campaña {campaniaId || '—'}.
+          </p>
+          <p className="text-muted small mb-0">
+            Si archivás ahora, las decisiones pendientes quedarán fuera de la vista activa y podrás verlas en el historial.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowArchiveModal(false)}>
+            Más tarde
+          </Button>
+          <Button variant="primary" onClick={onArchiveAfterExport} disabled={archiveLoading}>
+            {archiveLoading ? 'Archivando…' : 'Archivar ahora'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </>
   )
 }

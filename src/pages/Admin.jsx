@@ -485,7 +485,7 @@ export default function Admin() {
               </Col>
             </Row>
           </Tab>
-           <Tab eventKey="revisiones" title="Revisiones">
+           <Tab eventKey="revisiones" title="Evaluar / Decidir / Exportar">
             <Revisiones
               campanias={campanias}
               campaniaIdDefault={(campanias.find(c=>c.activa)?.id || campanias[0]?.id)}
