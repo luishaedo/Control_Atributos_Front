@@ -77,6 +77,10 @@ function consensusLabel(share) {
   if (share > 0) return { text: `${pct}%`, variant: 'warning' }
   return { text: 'Sin votos', variant: 'secondary' }
 }
+function getAcceptedAttributeCode(propuestas = [], field) {
+  const accepted = propuestas.find((p) => p?.decision && p?.decision?.estado !== 'rechazada' && p?.[field])
+  return accepted?.[field] || ''
+}
 function descargarBlobDirecto(blob, nombre) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -615,9 +619,13 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                     <Col md={7}>
                       <h6 className="mb-3">Propuestas por atributo</h6>
                       {(['categoria_cod', 'tipo_cod', 'clasif_cod']).map((field) => {
+                        const acceptedCode = getAcceptedAttributeCode(it.propsFiltradas, field)
                         const meta = buildAttributeOptions(it.propsFiltradas, field)
+                        const visibleOptions = acceptedCode
+                          ? meta.options.filter((opt) => opt.code === acceptedCode)
+                          : meta.options
                         const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
-                        if (!meta.options.length) return null
+                        if (!visibleOptions.length) return null
                         return (
                           <Card key={field} className="mb-3 border-0 shadow-sm">
                             <Card.Body>
@@ -626,8 +634,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                 <div className="text-muted small">{meta.total} votos</div>
                               </div>
                               <div className="mt-2 d-flex flex-column gap-2">
-                                {meta.options.map((opt) => {
+                                {visibleOptions.map((opt) => {
                                   const consensus = consensusLabel(opt.share)
+                                  const isAccepted = Boolean(acceptedCode && opt.code === acceptedCode)
                                   return (
                                     <div key={`${field}-${opt.code}`} className="border rounded p-2">
                                       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
@@ -636,6 +645,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                           <div className="small text-muted">
                                             {opt.count} votos ·
                                             <Badge bg={consensus.variant} className="ms-2">{consensus.text}</Badge>
+                                            {isAccepted && <Badge bg="success" className="ms-2">Aceptada</Badge>}
                                           </div>
                                           <Stack direction="horizontal" gap={2} className="mt-1 flex-wrap">
                                             {opt.usuarios.map(u => <Badge bg="secondary" key={`${field}-${opt.code}-${u}`}>{u}</Badge>)}
@@ -647,7 +657,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                             variant="outline-danger"
                                             size="sm"
                                             onClick={() => onDecideAttribute(it.sku, field, opt.code, 'rechazar')}
-                                            disabled={!authOK}
+                                            disabled={!authOK || isAccepted}
                                           >
                                             Rechazar
                                           </Button>
@@ -655,7 +665,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                             variant="success"
                                             size="sm"
                                             onClick={() => onDecideAttribute(it.sku, field, opt.code, 'aceptar')}
-                                            disabled={!authOK}
+                                            disabled={!authOK || isAccepted}
                                           >
                                             Aceptar
                                           </Button>
