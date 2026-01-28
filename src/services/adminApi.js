@@ -1,4 +1,5 @@
 // src/services/adminApi.js — versión completa y consistente
+import { pad2 } from "../utils/sku";
 const API_BASE =
   import.meta.env?.VITE_API_URL?.replace(/\/$/, "") || window.location.origin;
 
@@ -69,9 +70,10 @@ export function adminPing() {
 
 // ======================= Importadores JSON (si tu back los expone por JSON)
 export function importarDiccionariosJSON(payload) {
+  const normalized = normalizeDictionaryPayload(payload);
   return fetchAuthJSON("/api/admin/diccionarios/import-json", {
     method: "POST",
-    body: JSON.stringify(payload || {}),
+    body: JSON.stringify(normalized),
   });
 }
 export function importarMaestroJSON(items) {
@@ -237,4 +239,19 @@ export function exportTxtClasif(campaniaId, estado = "aceptadas", incluirArchiva
   return fetchAuthBlob(`/api/admin/export/txt/clasif?${qsFrom({
     campaniaId: id, estado, ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
   })}`);
+}
+
+function normalizeDictionaryPayload(payload) {
+  const data = payload || {};
+  const normalizeList = (list) =>
+    (list || []).map((item) => ({
+      ...item,
+      cod: pad2(item?.cod),
+    }));
+
+  return {
+    categorias: normalizeList(data.categorias),
+    tipos: normalizeList(data.tipos),
+    clasif: normalizeList(data.clasif),
+  };
 }
