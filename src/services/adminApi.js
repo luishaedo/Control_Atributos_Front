@@ -83,6 +83,12 @@ export function importarMaestroJSON(items) {
   });
 }
 
+// ======================= Maestro (missing)
+export function getMissingMaestro(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "getMissingMaestro");
+  return fetchAuthJSON(`/api/admin/maestro/missing?${qsFrom({ campaniaId: id })}`);
+}
+
 // ======================= Campañas (crear por público /api)
 export function crearCampania(data) {
   return fetchAuthJSON("/api/campanias", {
