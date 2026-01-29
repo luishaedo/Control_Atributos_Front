@@ -1097,6 +1097,59 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                           </tr>
                         </tbody>
                       </Table>
+                      <h6 className="mt-3">Aceptadas (sugerencias)</h6>
+                      <Table size="sm" bordered>
+                        <tbody>
+                          <tr>
+                            <td>Categoría</td>
+                            <td>{acceptedCategoriaCode ? etiqueta(dic?.categorias, acceptedCategoriaCode) : '—'}</td>
+                            <td className="text-end">
+                              {acceptedCategoriaDecision && acceptedCategoriaDecision.estado !== 'aplicada' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  onClick={() => onUndoAttributeDecision(acceptedCategoriaDecision.id, it.sku)}
+                                  disabled={!authOK}
+                                >
+                                  Deshacer
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Tipo</td>
+                            <td>{acceptedTipoCode ? etiqueta(dic?.tipos, acceptedTipoCode) : '—'}</td>
+                            <td className="text-end">
+                              {acceptedTipoDecision && acceptedTipoDecision.estado !== 'aplicada' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  onClick={() => onUndoAttributeDecision(acceptedTipoDecision.id, it.sku)}
+                                  disabled={!authOK}
+                                >
+                                  Deshacer
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Clasificación</td>
+                            <td>{acceptedClasifCode ? etiqueta(dic?.clasif, acceptedClasifCode) : '—'}</td>
+                            <td className="text-end">
+                              {acceptedClasifDecision && acceptedClasifDecision.estado !== 'aplicada' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  onClick={() => onUndoAttributeDecision(acceptedClasifDecision.id, it.sku)}
+                                  disabled={!authOK}
+                                >
+                                  Deshacer
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </Table>
                     </Col>
                     <Col md={7}>
                       <h6 className="mb-2">Sugerencias por atributo</h6>
@@ -1107,6 +1160,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                             ? it.maestro?.tipo_cod
                             : it.maestro?.clasif_cod
                         const acceptedCode = getAcceptedAttributeCode(it.propuestas, field)
+                        const isLocked = Boolean(acceptedCode)
                         const meta = buildAttributeOptions(it.propuestas, field)
                         const filteredOptions = meta.options.filter((opt) => String(opt.code) !== String(maestroCode))
                         const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
@@ -1139,6 +1193,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                 <div className="fw-semibold">{label}</div>
                                 <div className="text-muted small">{meta.total} votos</div>
                               </div>
+                              {isLocked && (
+                                <div className="text-muted small mt-1">
+                                  Deshacé la decisión para evaluar otra opción.
+                                </div>
+                              )}
                               <div className="mt-2 d-flex flex-column gap-2">
                                 {filteredOptions.map((opt) => {
                                   const consensus = consensusLabel(opt.share)
