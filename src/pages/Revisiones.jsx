@@ -863,39 +863,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== UI =====
   return (
     <>
-      <Card className="mb-3">
-        <Card.Body className="d-flex flex-column flex-lg-row gap-3 align-items-start align-items-lg-center justify-content-between">
-          <div>
-            <div className="fw-semibold">Flujo guiado</div>
-            <div className="text-muted small">
-              Paso 1: evaluá discrepancias, Paso 2: confirmá cambios, Paso 3: consolidá resultados.
-            </div>
-          </div>
-          <ButtonGroup aria-label="Wizard steps">
-            <Button
-              variant={activeTab === 'revisiones' ? 'primary' : 'outline-primary'}
-              onClick={() => setActiveTab('revisiones')}
-            >
-              1. Evaluar
-            </Button>
-            <Button
-              variant={activeTab === 'confirm' ? 'primary' : 'outline-primary'}
-              onClick={() => {
-                setActiveTab('confirm')
-              }}
-            >
-              2. Confirmación
-            </Button>
-            <Button
-              variant={activeTab === 'consolidate' ? 'primary' : 'outline-primary'}
-              onClick={() => setActiveTab('consolidate')}
-            >
-              3. Consolidación
-            </Button>
-          </ButtonGroup>
-        </Card.Body>
-      </Card>
-
       <ToastContainer position="bottom-end" className="p-3">
         <Toast
           bg={toast.variant}
@@ -1082,59 +1049,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                           <tr>
                             <td>Clasificación</td>
                             <td>{acceptedClasifCode ? etiquetaNombre(dic?.clasif, acceptedClasifCode) : '—'}</td>
-                            <td className="text-end">
-                              {acceptedClasifDecision && acceptedClasifDecision.estado !== 'aplicada' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline-secondary"
-                                  onClick={() => onUndoAttributeDecision(acceptedClasifDecision.id, it.sku)}
-                                  disabled={!authOK}
-                                >
-                                  Deshacer
-                                </Button>
-                              )}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </Table>
-                      <h6 className="mt-3">Aceptadas (sugerencias)</h6>
-                      <Table size="sm" bordered>
-                        <tbody>
-                          <tr>
-                            <td>Categoría</td>
-                            <td>{acceptedCategoriaCode ? etiqueta(dic?.categorias, acceptedCategoriaCode) : '—'}</td>
-                            <td className="text-end">
-                              {acceptedCategoriaDecision && acceptedCategoriaDecision.estado !== 'aplicada' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline-secondary"
-                                  onClick={() => onUndoAttributeDecision(acceptedCategoriaDecision.id, it.sku)}
-                                  disabled={!authOK}
-                                >
-                                  Deshacer
-                                </Button>
-                              )}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>Tipo</td>
-                            <td>{acceptedTipoCode ? etiqueta(dic?.tipos, acceptedTipoCode) : '—'}</td>
-                            <td className="text-end">
-                              {acceptedTipoDecision && acceptedTipoDecision.estado !== 'aplicada' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline-secondary"
-                                  onClick={() => onUndoAttributeDecision(acceptedTipoDecision.id, it.sku)}
-                                  disabled={!authOK}
-                                >
-                                  Deshacer
-                                </Button>
-                              )}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>Clasificación</td>
-                            <td>{acceptedClasifCode ? etiqueta(dic?.clasif, acceptedClasifCode) : '—'}</td>
                             <td className="text-end">
                               {acceptedClasifDecision && acceptedClasifDecision.estado !== 'aplicada' && (
                                 <Button
