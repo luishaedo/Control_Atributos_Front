@@ -83,6 +83,31 @@ export function importarMaestroJSON(items) {
   });
 }
 
+// ======================= Maestro (missing)
+export function getMissingMaestro(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "getMissingMaestro");
+  return fetchAuthJSON(`/api/admin/maestro/missing?${qsFrom({ campaniaId: id })}`);
+}
+
+// ======================= Confirmaciones
+export function getConfirmaciones(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "getConfirmaciones");
+  return fetchAuthJSON(`/api/admin/confirmaciones?${qsFrom({ campaniaId: id })}`);
+}
+
+// ======================= Consolidación
+export function getConsolidacionCambios(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "getConsolidacionCambios");
+  return fetchAuthJSON(`/api/admin/consolidacion/cambios?${qsFrom({ campaniaId: id })}`);
+}
+
+export function cerrarCampania(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "cerrarCampania");
+  return fetchAuthJSON(`/api/admin/campanias/${encodeURIComponent(id)}/cerrar`, {
+    method: "POST",
+  });
+}
+
 // ======================= Campañas (crear por público /api)
 export function crearCampania(data) {
   return fetchAuthJSON("/api/campanias", {

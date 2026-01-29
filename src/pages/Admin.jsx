@@ -261,6 +261,8 @@ export default function Admin() {
     return <Badge bg={variantEstado(estado)}>{estado}</Badge>
   }
 
+  const [activeAdminTab, setActiveAdminTab] = useState('revisiones')
+
   return (
     <div>
       <Topbar user={user} onChangeUser={cambiarIdentificacion} />
@@ -284,12 +286,25 @@ export default function Admin() {
             {error && <Alert variant="danger" className="mt-2">{error}</Alert>}
           </Card.Body>
         </Card>
-        <div className="d-flex justify-content-end mb-2">
-  <button className="btn btn-outline-primary" onClick={() => navigate('/auditoria')}>
-    Auditoría
-  </button>
-</div>
-        <Tabs defaultActiveKey="import" className="mb-3">
+        <div className="d-flex justify-content-end mb-2 gap-2">
+          <Button variant="outline-secondary" onClick={() => setActiveAdminTab('campanias')}>
+            Campaña
+          </Button>
+          <Button variant="outline-secondary" onClick={() => setActiveAdminTab('import')}>
+            Maestro
+          </Button>
+          <Button variant="outline-primary" onClick={() => navigate('/auditoria')}>
+            Auditoría
+          </Button>
+        </div>
+        <Tabs activeKey={activeAdminTab} onSelect={(k) => setActiveAdminTab(k || 'revisiones')} className="mb-3">
+           <Tab eventKey="revisiones" title="Acciones">
+            <Revisiones
+              campanias={campanias}
+              campaniaIdDefault={(campanias.find(c=>c.activa)?.id || campanias[0]?.id)}
+              authOK={authOK}
+            />
+          </Tab>
           <Tab eventKey="import" title="Maestro & Diccionarios">
             <Card className="mb-3">
   <Card.Header>Importar por Archivo (CSV)</Card.Header>
@@ -484,13 +499,6 @@ export default function Admin() {
                 </Card>
               </Col>
             </Row>
-          </Tab>
-           <Tab eventKey="revisiones" title="Evaluar / Decidir / Exportar">
-            <Revisiones
-              campanias={campanias}
-              campaniaIdDefault={(campanias.find(c=>c.activa)?.id || campanias[0]?.id)}
-              authOK={authOK}
-            />
           </Tab>
         </Tabs>
       </Container>
