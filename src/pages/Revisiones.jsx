@@ -27,6 +27,7 @@ import {
   // Revisiones
   getRevisiones, decidirRevision,
   importarMaestroJSON, getMissingMaestro,
+  getConfirmaciones, getConsolidacionCambios, cerrarCampania,
   // Cola
   listarActualizaciones, exportActualizacionesCSV, aplicarActualizaciones,
   archivarActualizaciones, undoActualizacion, revertirActualizacion,
@@ -160,6 +161,12 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [missingItems, setMissingItems] = useState([])
   const [missingLoading, setMissingLoading] = useState(false)
   const [missingError, setMissingError] = useState('')
+  const [confirmItems, setConfirmItems] = useState([])
+  const [confirmLoading, setConfirmLoading] = useState(false)
+  const [confirmError, setConfirmError] = useState('')
+  const [consolidateItems, setConsolidateItems] = useState([])
+  const [consolidateLoading, setConsolidateLoading] = useState(false)
+  const [consolidateError, setConsolidateError] = useState('')
 
   // Filtros por columna (client-side)
   const [fSKU, setFSKU] = useState('')
@@ -217,6 +224,34 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     }
   }
 
+  async function loadConfirmaciones() {
+    if (!authOK || !campaniaId) return
+    try {
+      setConfirmLoading(true)
+      setConfirmError('')
+      const data = await getConfirmaciones(Number(campaniaId))
+      setConfirmItems(data.items || [])
+    } catch (e) {
+      setConfirmError(e?.message || 'No se pudieron cargar las confirmaciones.')
+    } finally {
+      setConfirmLoading(false)
+    }
+  }
+
+  async function loadConsolidacion() {
+    if (!authOK || !campaniaId) return
+    try {
+      setConsolidateLoading(true)
+      setConsolidateError('')
+      const data = await getConsolidacionCambios(Number(campaniaId))
+      setConsolidateItems(data.items || [])
+    } catch (e) {
+      setConsolidateError(e?.message || 'No se pudieron cargar los cambios de consolidación.')
+    } finally {
+      setConsolidateLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!authOK || !campaniaId) return
     cargar().catch(e => console.error('[Revisiones] cargar error', e))
@@ -226,6 +261,18 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   useEffect(() => {
     if (activeTab !== 'export') return
     loadMissingItems()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, campaniaId, authOK])
+
+  useEffect(() => {
+    if (activeTab !== 'confirm') return
+    loadConfirmaciones()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, campaniaId, authOK])
+
+  useEffect(() => {
+    if (activeTab !== 'consolidate') return
+    loadConsolidacion()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, campaniaId, authOK])
 
@@ -467,6 +514,8 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       })
       return next
     })
+    setActiveTab('consolidate')
+    loadConsolidacion()
   }
 
   function buildSummary() {
@@ -547,10 +596,27 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     descargarBlobDirecto(csvBlob, `campania_${campaniaId}_resumen.csv`)
   }
 
-  function onCloseCampaign() {
-    const summary = buildSummary()
-    exportSummaryFiles(summary)
-    setCloseSummary(summary)
+  async function onCloseCampaign() {
+    try {
+      const response = await cerrarCampania(Number(campaniaId))
+      if (response?.summary) {
+        setCloseSummary(response.summary)
+      } else {
+        setCloseSummary(null)
+        setToast({
+          show: true,
+          variant: 'warning',
+          message: 'La campaña se cerró, pero no se recibió el resumen.'
+        })
+      }
+      loadConsolidacion()
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo cerrar la campaña.'
+      })
+    }
   }
 
   // ===== Acciones tarjetas =====
@@ -1329,101 +1395,89 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                   Ordenados por cantidad de cambios. Podés devolver a Evaluar si hace falta.
                 </div>
               </div>
-              <Button variant="primary" onClick={onApplyConfirmation} disabled={!confirmQueue.length}>
-                Enviar a Consolidación
+              <Button variant="primary" onClick={onApplyConfirmation} disabled={confirmLoading}>
+                Ir a Consolidación
               </Button>
             </Card.Header>
             <Card.Body>
-              <Table responsive bordered size="sm">
-                <thead>
-                  <tr>
-                    <th>SKU</th>
-                    <th>Cambios</th>
-                    <th>Confirmar</th>
-                    <th>Volver a evaluar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {confirmQueue
-                    .slice()
-                    .sort((a, b) => getChangeCountForItem(b) - getChangeCountForItem(a))
-                    .map((item) => {
-                      const changes = ['categoria_cod', 'tipo_cod', 'clasif_cod']
-                        .filter((field) => {
-                          const original = field === 'categoria_cod'
-                            ? item?.maestro?.categoria_cod
-                            : field === 'tipo_cod'
-                              ? item?.maestro?.tipo_cod
-                              : item?.maestro?.clasif_cod
-                          const nextValue = getEffectiveValue(item, field)
-                          return String(nextValue || '') !== String(original || '')
-                        })
-                      const verified = ['categoria_cod', 'tipo_cod', 'clasif_cod']
-                        .filter((field) => !changes.includes(field))
+              {confirmError && <Alert variant="danger">{confirmError}</Alert>}
+              {confirmLoading ? (
+                <div className="text-center text-muted">Cargando confirmaciones...</div>
+              ) : (
+                <Table responsive bordered size="sm">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Cambios</th>
+                      <th>Verificados</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {confirmItems
+                      .slice()
+                      .sort((a, b) => Object.keys(b?.changes || {}).length - Object.keys(a?.changes || {}).length)
+                      .map((item) => {
+                      const changesEntries = Object.entries(item?.changes || {})
+                      const verifiedEntries = Object.entries(item?.verified || {})
                       return (
                         <tr key={item.sku}>
                           <td>{item.sku}</td>
                           <td>
-                            {changes.length ? (
-                              changes.map((field) => {
+                            {changesEntries.length ? (
+                              changesEntries.map(([field, value]) => {
                                 const dicKey = field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'
                                 const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
-                                const nextValue = getEffectiveValue(item, field)
                                 return (
                                   <Badge bg="light" text="dark" className="me-2" key={field}>
-                                    {label}: {etiquetaNombre(dic?.[dicKey], nextValue)}
+                                    {label}: {etiquetaNombre(dic?.[dicKey], value)}
                                   </Badge>
                                 )
                               })
                             ) : (
                               <Badge bg="secondary">Sin cambios</Badge>
                             )}
-                            {verified.length > 0 && (
-                              <OverlayTrigger
-                                placement="top"
-                                overlay={(
-                                  <Tooltip>
-                                    {verified.map((field) => {
-                                      const dicKey = field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'
-                                      const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
-                                const value = getEffectiveValue(item, field)
-                                      return `${label}: ${etiquetaNombre(dic?.[dicKey], value)}`
-                                    }).join(' | ')}
-                                  </Tooltip>
-                                )}
-                              >
-                                <Badge bg="info" className="ms-2">+</Badge>
-                              </OverlayTrigger>
+                          </td>
+                          <td>
+                            {verifiedEntries.length ? (
+                              verifiedEntries.map(([field, value]) => {
+                                const dicKey = field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'
+                                const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
+                                return (
+                                  <Badge bg="info" className="me-2" key={field}>
+                                    {label}: {etiquetaNombre(dic?.[dicKey], value)}
+                                  </Badge>
+                                )
+                              })
+                            ) : (
+                              <Badge bg="secondary">Sin verificados</Badge>
                             )}
                           </td>
                           <td>
-                            <Form.Check
-                              type="switch"
-                              checked={confirmFlags[item.sku] !== false}
-                              onChange={(e) => onToggleConfirmFlag(item.sku, e.target.checked)}
-                            />
-                          </td>
-                          <td>
-                            <Button
-                              size="sm"
-                              variant="outline-secondary"
-                              onClick={() => setStageBySku((prev) => ({ ...prev, [item.sku]: 'evaluate' }))}
-                            >
-                              Evaluar
-                            </Button>
+                            {item?.decision?.estado ? (
+                              <>
+                                {badgeDecision(item.decision.estado)}
+                                {item?.decision?.decidedBy && (
+                                  <div className="text-muted small">{item.decision.decidedBy}</div>
+                                )}
+                              </>
+                            ) : (
+                              <Badge bg="secondary">Pendiente</Badge>
+                            )}
                           </td>
                         </tr>
                       )
                     })}
-                  {!confirmQueue.length && (
-                    <tr>
-                      <td colSpan={4} className="text-center text-muted">
-                        No hay SKUs en confirmación.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
+                    {!confirmItems.length && (
+                      <tr>
+                        <td colSpan={4} className="text-center text-muted">
+                          No hay SKUs en confirmación.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              )}
             </Card.Body>
           </Card>
         </Tab>
@@ -1436,54 +1490,59 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                   Exportá solo cambios reales y cerrá la campaña cuando esté lista.
                 </div>
               </div>
-              <Button variant="success" onClick={onCloseCampaign} disabled={!consolidateQueue.length}>
+              <Button variant="success" onClick={onCloseCampaign} disabled={consolidateLoading}>
                 Cerrar campaña
               </Button>
             </Card.Header>
             <Card.Body>
-              <Table responsive bordered size="sm">
-                <thead>
-                  <tr>
-                    <th>SKU</th>
-                    <th>Cambios</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {consolidateQueue.map((item) => (
-                    <tr key={item.sku}>
-                      <td>{item.sku}</td>
-                      <td>
-                        {getChangeCountForItem(item) === 0 ? (
-                          <Badge bg="secondary">Verificado</Badge>
-                        ) : (
-                          ['categoria_cod', 'tipo_cod', 'clasif_cod'].map((field) => {
-                            const original = field === 'categoria_cod'
-                              ? item?.maestro?.categoria_cod
-                              : field === 'tipo_cod'
-                                ? item?.maestro?.tipo_cod
-                                : item?.maestro?.clasif_cod
-                            const nextValue = getEffectiveValue(item, field)
-                            if (String(nextValue || '') === String(original || '')) return null
-                            const dicKey = field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'
-                            return (
-                              <Badge bg="light" text="dark" className="me-2" key={field}>
-                                {etiquetaNombre(dic?.[dicKey], nextValue)}
-                              </Badge>
-                            )
-                          })
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {!consolidateQueue.length && (
+              {consolidateError && <Alert variant="danger">{consolidateError}</Alert>}
+              {consolidateLoading ? (
+                <div className="text-center text-muted">Cargando consolidación...</div>
+              ) : (
+                <Table responsive bordered size="sm">
+                  <thead>
                     <tr>
-                      <td colSpan={2} className="text-center text-muted">
-                        No hay SKUs en consolidación.
-                      </td>
+                      <th>SKU</th>
+                      <th>Cambios</th>
                     </tr>
-                  )}
-                </tbody>
-              </Table>
+                  </thead>
+                  <tbody>
+                    {consolidateItems
+                      .slice()
+                      .sort((a, b) => Object.keys(b?.changes || {}).length - Object.keys(a?.changes || {}).length)
+                      .map((item) => {
+                      const changeEntries = Object.entries(item?.changes || {})
+                      return (
+                        <tr key={item.sku}>
+                          <td>{item.sku}</td>
+                          <td>
+                            {changeEntries.length ? (
+                              changeEntries.map(([field, value]) => {
+                                const dicKey = field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'
+                                const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
+                                return (
+                                  <Badge bg="light" text="dark" className="me-2" key={field}>
+                                    {label}: {etiquetaNombre(dic?.[dicKey], value)}
+                                  </Badge>
+                                )
+                              })
+                            ) : (
+                              <Badge bg="secondary">Sin cambios</Badge>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {!consolidateItems.length && (
+                      <tr>
+                        <td colSpan={2} className="text-center text-muted">
+                          No hay SKUs en consolidación.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              )}
             </Card.Body>
           </Card>
         </Tab>
@@ -1497,14 +1556,28 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
             <>
               <p><strong>Campaña:</strong> {campaniaId || '—'}</p>
               <p><strong>Total SKUs:</strong> {closeSummary.totalSkus}</p>
-              <p><strong>Actualizados:</strong> {closeSummary.updatedSkus}</p>
-              <p><strong>Verificados:</strong> {closeSummary.verifiedSkus}</p>
+              <p><strong>Actualizados:</strong> {closeSummary.updated}</p>
+              <p><strong>Verificados:</strong> {closeSummary.verified}</p>
               <h6 className="mt-3">Estadísticas por usuario</h6>
-              <ul className="mb-0">
-                {Object.entries(closeSummary.statsByUser).map(([email, count]) => (
-                  <li key={email}>{email}: {count}</li>
-                ))}
-              </ul>
+              {closeSummary.statsByUser?.length ? (
+                <ul className="mb-0">
+                  {closeSummary.statsByUser.map((entry) => (
+                    <li key={entry.user}>{entry.user}: {entry.count}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted mb-0">Sin datos por usuario.</p>
+              )}
+              {closeSummary.skusWithChanges?.length ? (
+                <>
+                  <h6 className="mt-3">SKUs con cambios</h6>
+                  <ul>
+                    {closeSummary.skusWithChanges.map((item) => (
+                      <li key={item.sku}>{item.sku}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
             </>
           ) : null}
         </Modal.Body>
