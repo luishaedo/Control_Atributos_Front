@@ -117,13 +117,23 @@ export function crearCampania(data) {
 }
 
 // ======================= Auditoría (Admin.jsx)
-export function getDiscrepancias(campaniaId) {
+export function getDiscrepancias(campaniaId, opts = {}) {
   const id = assertHasCampaignId(campaniaId, "getDiscrepancias");
-  return fetchAuthJSON(`/api/admin/discrepancias?${qsFrom({ campaniaId: id })}`);
+  const query = {
+    campaniaId: id,
+    ...(opts.sku ? { sku: String(opts.sku) } : {}),
+    ...(opts.minVotos !== undefined ? { minVotos: String(opts.minVotos) } : {}),
+  };
+  return fetchAuthJSON(`/api/admin/discrepancias?${qsFrom(query)}`);
 }
-export function getDiscrepanciasSucursales(campaniaId) {
+export function getDiscrepanciasSucursales(campaniaId, opts = {}) {
   const id = assertHasCampaignId(campaniaId, "getDiscrepanciasSucursales");
-  return fetchAuthJSON(`/api/admin/discrepancias-sucursales?${qsFrom({ campaniaId: id })}`);
+  const query = {
+    campaniaId: id,
+    ...(opts.sku ? { sku: String(opts.sku) } : {}),
+    ...(opts.minSucursales !== undefined ? { minSucursales: String(opts.minSucursales) } : {}),
+  };
+  return fetchAuthJSON(`/api/admin/discrepancias-sucursales?${qsFrom(query)}`);
 }
 export function exportDiscrepanciasCSV(campaniaId) {
   const id = assertHasCampaignId(campaniaId, "exportDiscrepanciasCSV");

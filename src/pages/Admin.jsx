@@ -1,16 +1,14 @@
 import { useNavigate } from 'react-router-dom'
 import React, { useEffect, useState } from 'react'
-import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Badge, Spinner } from 'react-bootstrap'
+import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Spinner } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
 import IdentityModal from '../components/IdentityModal.jsx'
-import { getCampaigns, setActiveCampaign, getDictionaries } from '../services/api.js'
-import { pad2 } from '../utils/sku.js'
+import { getCampaigns, setActiveCampaign } from '../services/api.js'
 import Revisiones from './Revisiones.jsx'
 import {
   adminPing, adminSetToken, adminGetToken,
   importarDiccionariosJSON, importarMaestroJSON,
   crearCampania,
-  getDiscrepancias, getDiscrepanciasSucursales, exportDiscrepanciasCSV,
   exportMaestroCSV, exportCategoriasCSV, exportTiposCSV, exportClasifCSV
 } from '../services/adminApi.js'
 import { uploadDiccionarios, uploadMaestro } from '../services/adminImportApi.js'
@@ -39,8 +37,6 @@ export default function Admin() {
   const [importMsg, setImportMsg] = useState('')
   const [isUploadingDic, setIsUploadingDic] = useState(false)
   const [isUploadingMae, setIsUploadingMae] = useState(false)
-  const [dic, setDic] = useState(null)
-
   const [dicEjemplo, setDicEjemplo] = useState(JSON.stringify({
     categorias: [{ cod: '01', nombre: 'Jean' }],
     tipos: [{ cod: '10', nombre: 'Slim' }],
@@ -57,9 +53,6 @@ export default function Admin() {
   })
   const navigate = useNavigate()
   const isUploading = isUploadingDic || isUploadingMae
-  const [campaniaIdAud, setCampaniaIdAud] = useState('')
-  const [discrepancias, setDiscrepancias] = useState([])
-  const [discrepSuc, setDiscrepSuc] = useState([])
   const [showIdentityModal, setShowIdentityModal] = useState(false)
 
   useEffect(() => {
@@ -68,7 +61,6 @@ export default function Admin() {
       adminPing().then(() => setAuthOK(true)).catch(() => setAuthOK(false))
     }
     cargarCampanias()
-    getDictionaries().then(setDic).catch(() => {})
   }, [])
 
   function guardarIdentificacion(nuevo) {
@@ -94,7 +86,6 @@ export default function Admin() {
       setImportMsg('')
       const r = await uploadDiccionarios(filesDic)
       setImportMsg(`Diccionarios OK → categorías=${r.categorias}, tipos=${r.tipos}, clasif=${r.clasif}`)
-      getDictionaries().then(setDic).catch(() => {})
     } catch (e) {
       setError(e.message || 'Error importando diccionarios (archivo)')
     } finally {
@@ -124,9 +115,6 @@ export default function Admin() {
     try {
       const list = await getCampaigns()
       setCampanias(list)
-      if (!campaniaIdAud && list.length) {
-        setCampaniaIdAud(String(list.find(c => c.activa)?.id || list[0].id))
-      }
     } catch (_) { /* noop */ }
   }
 
@@ -149,7 +137,6 @@ export default function Admin() {
       const payload = JSON.parse(dicEjemplo)
       const r = await importarDiccionariosJSON(payload)
       alert('OK: ' + JSON.stringify(r))
-      getDictionaries().then(setDic)
     } catch (e) {
       setError(e.message || 'Error importando diccionarios (¿JSON válido?)')
     }
@@ -190,37 +177,6 @@ export default function Admin() {
     }
   }
 
-  async function cargarDiscrepancias() {
-    try {
-      if (!campaniaIdAud) { alert('Elegí una campaña primero'); return }
-      setError(null)
-      const data = await getDiscrepancias(Number(campaniaIdAud))
-      setDiscrepancias(data.items || [])
-    } catch (e) {
-      setError(e.message || 'Error cargando discrepancias')
-    }
-  }
-
-  async function cargarDiscrepSuc() {
-    try {
-      if (!campaniaIdAud) { alert('Elegí una campaña primero'); return }
-      setError(null)
-      const data = await getDiscrepanciasSucursales(Number(campaniaIdAud))
-      setDiscrepSuc(data.items || [])
-    } catch (e) {
-      setError(e.message || 'Error cargando discrepancias entre sucursales')
-    }
-  }
-
-  async function bajarCSVDiscrepancias() {
-    try {
-      const blob = await exportDiscrepanciasCSV(Number(campaniaIdAud))
-      descargarBlobDirecto(blob, `discrepancias_campania_${campaniaIdAud}.csv`)
-    } catch (e) {
-      setError(e.message || 'No se pudo exportar CSV')
-    }
-  }
-
   function descargarBlobDirecto(blob, nombre) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -240,26 +196,7 @@ export default function Admin() {
     }
   }
 
-  // === Helpers UI ===
-  function etiqueta(dicArr, cod) {
-    if (!cod) return '—'
-    const c = pad2(cod)
-    const item = (dicArr || []).find(d => d.cod === c)
-    return item ? `${c} · ${item.nombre}` : c
-  }
-  function etiquetas(dicArr, lista) {
-    if (!lista?.length) return '—'
-    return lista.map(c => etiqueta(dicArr, c)).join(', ')
-  }
-  function variantEstado(estado) {
-    if (estado === 'OK') return 'success'
-    if (estado === 'REVISAR') return 'warning'
-    if (estado === 'NO_MAESTRO') return 'danger'
-    return 'secondary'
-  }
-  function BadgeEstado({ estado }) {
-    return <Badge bg={variantEstado(estado)}>{estado}</Badge>
-  }
+  const [activeAdminTab, setActiveAdminTab] = useState('revisiones')
 
   const [activeAdminTab, setActiveAdminTab] = useState('revisiones')
 
