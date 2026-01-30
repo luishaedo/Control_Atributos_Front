@@ -255,25 +255,46 @@ export function exportActualizacionesCSV(campaniaId) {
 }
 
 // ======================= Exports TXT (por campo)
-export function exportTxtCategoria(campaniaId, estado = "aceptadas", incluirArchivadas = false) {
+export function exportTxtCategoria(campaniaId, estado = "applied", incluirArchivadas = false) {
   const id = assertHasCampaignId(campaniaId, "exportTxtCategoria");
   return fetchAuthBlob(`/api/admin/export/txt/categoria?${qsFrom({
-    campaniaId: id, estado, ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
+    campaniaId: id,
+    scope: estado,
+    ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
   })}`);
 }
 
-export function exportTxtTipo(campaniaId, estado = "aceptadas", incluirArchivadas = false) {
+export function exportTxtTipo(campaniaId, estado = "applied", incluirArchivadas = false) {
   const id = assertHasCampaignId(campaniaId, "exportTxtTipo");
   return fetchAuthBlob(`/api/admin/export/txt/tipo?${qsFrom({
-    campaniaId: id, estado, ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
+    campaniaId: id,
+    scope: estado,
+    ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
   })}`);
 }
 
-export function exportTxtClasif(campaniaId, estado = "aceptadas", incluirArchivadas = false) {
+export function exportTxtClasif(campaniaId, estado = "applied", incluirArchivadas = false) {
   const id = assertHasCampaignId(campaniaId, "exportTxtClasif");
   return fetchAuthBlob(`/api/admin/export/txt/clasif?${qsFrom({
-    campaniaId: id, estado, ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
+    campaniaId: id,
+    scope: estado,
+    ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
   })}`);
+}
+
+export function exportSummaryTxt(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "exportSummaryTxt");
+  return fetchAuthBlob(`/api/admin/export/txt/summary?${qsFrom({ campaniaId: id })}`);
+}
+
+export async function fetchAdminBlobByUrl(url) {
+  const fullUrl = url.startsWith("http") ? url : `${API_BASE}${url}`;
+  const resp = await fetch(fullUrl, { headers: authHeaders() });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(text || `HTTP ${resp.status}`);
+  }
+  return resp.blob();
 }
 
 function normalizeDictionaryPayload(payload) {

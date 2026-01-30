@@ -198,8 +198,6 @@ export default function Admin() {
 
   const [activeAdminTab, setActiveAdminTab] = useState('revisiones')
 
-  const [activeAdminTab, setActiveAdminTab] = useState('revisiones')
-
   return (
     <div>
       <Topbar user={user} onChangeUser={cambiarIdentificacion} />

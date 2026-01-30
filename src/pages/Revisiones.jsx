@@ -32,7 +32,7 @@ import {
   listarActualizaciones, exportActualizacionesCSV, aplicarActualizaciones,
   archivarActualizaciones, undoActualizacion, revertirActualizacion,
   // TXT
-  exportTxtCategoria, exportTxtTipo, exportTxtClasif,
+  exportTxtCategoria, exportTxtTipo, exportTxtClasif, exportSummaryTxt, fetchAdminBlobByUrl,
 } from '../services/adminApi'
 
 // ===== Helpers =====
@@ -114,13 +114,18 @@ function getNewAttributeValue(item, field) {
   if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
   return item?.maestro?.clasif_cod || ''
 }
-function descargarBlobDirecto(blob, nombre) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = nombre
-  document.body.appendChild(a); a.click(); a.remove()
-  URL.revokeObjectURL(url)
-}
+  function descargarBlobDirecto(blob, nombre) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = nombre
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function descargarBlobDesdeUrl(url, nombre) {
+    const blob = await fetchAdminBlobByUrl(url)
+    descargarBlobDirecto(blob, nombre)
+  }
 
 export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Estado general =====
@@ -161,6 +166,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [missingItems, setMissingItems] = useState([])
   const [missingLoading, setMissingLoading] = useState(false)
   const [missingError, setMissingError] = useState('')
+  const [exportLoading, setExportLoading] = useState(false)
   const [confirmItems, setConfirmItems] = useState([])
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [confirmError, setConfirmError] = useState('')
@@ -609,6 +615,22 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           message: 'La campaña se cerró, pero no se recibió el resumen.'
         })
       }
+
+      const exports = response?.exports || {}
+      setExportLoading(true)
+      try {
+        await descargarTxtPorScope('applied', exports.applied || null)
+        await descargarTxtPorScope('unknown', exports.unknown || null)
+        if (exports.summaryTxt) {
+          await descargarBlobDesdeUrl(exports.summaryTxt, `summary_campania_${campaniaId}.txt`)
+        } else {
+          const summaryBlob = await exportSummaryTxt(Number(campaniaId))
+          descargarBlobDirecto(summaryBlob, `summary_campania_${campaniaId}.txt`)
+        }
+      } finally {
+        setExportLoading(false)
+      }
+
       loadConsolidacion()
     } catch (e) {
       setToast({
@@ -785,39 +807,65 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     setLastExportKind('CSV')
     setShowArchiveModal(true)
   }
-  async function onExportTxtCat(estado='aceptadas', incluirArchivadas=false) {
-    const b = await exportTxtCategoria(Number(campaniaId), estado, incluirArchivadas)
-    descargarBlobDirecto(b, `categoria_${campaniaId}_${estado}${incluirArchivadas?'_inclArch':''}.txt`)
-    setLastExportKind('TXT Categoría')
-    setShowArchiveModal(true)
-  }
-  async function onExportTxtTipo(estado='aceptadas', incluirArchivadas=false) {
-    const b = await exportTxtTipo(Number(campaniaId), estado, incluirArchivadas)
-    descargarBlobDirecto(b, `tipo_${campaniaId}_${estado}${incluirArchivadas?'_inclArch':''}.txt`)
-    setLastExportKind('TXT Tipo')
-    setShowArchiveModal(true)
-  }
-  async function onExportTxtClasif(estado='aceptadas', incluirArchivadas=false) {
-    const b = await exportTxtClasif(Number(campaniaId), estado, incluirArchivadas)
-    descargarBlobDirecto(b, `clasif_${campaniaId}_${estado}${incluirArchivadas?'_inclArch':''}.txt`)
-    setLastExportKind('TXT Clasif')
-    setShowArchiveModal(true)
-  }
-  function onExportTxtSeleccion(campo) {
-    const mapNew = { categoria: 'new_categoria_cod', tipo: 'new_tipo_cod', clasif: 'new_clasif_cod' }
-    const mapOld = { categoria: 'old_categoria_cod', tipo: 'old_tipo_cod', clasif: 'old_clasif_cod' }
-    const chosen = cola.filter(a => seleccion.includes(a.id))
-    const lines = []
-    for (const a of chosen) {
-      const newCode = a[mapNew[campo]]
-      const oldCode = a[mapOld[campo]]
-      if (!newCode) continue
-      if (oldCode && String(oldCode) === String(newCode)) continue
-      lines.push(`${a.sku}\t${newCode}`)
+  async function descargarTxtPorScope(scope, urls = null) {
+    const id = Number(campaniaId)
+    const suffix = scope || 'applied'
+    if (urls) {
+      await descargarBlobDesdeUrl(urls.categoria, `categoria_${id}_${suffix}.txt`)
+      await descargarBlobDesdeUrl(urls.tipo, `tipo_${id}_${suffix}.txt`)
+      await descargarBlobDesdeUrl(urls.clasif, `clasif_${id}_${suffix}.txt`)
+      return
     }
-    const body = '\ufeff' + lines.join('\n') + (lines.length ? '\n' : '')
-    const blob = new Blob([body], { type: 'text/plain;charset=utf-8' })
-    descargarBlobDirecto(blob, `${campo}_seleccion_camp_${campaniaId}.txt`)
+    const [catBlob, tipoBlob, clasifBlob] = await Promise.all([
+      exportTxtCategoria(id, scope),
+      exportTxtTipo(id, scope),
+      exportTxtClasif(id, scope)
+    ])
+    descargarBlobDirecto(catBlob, `categoria_${id}_${suffix}.txt`)
+    descargarBlobDirecto(tipoBlob, `tipo_${id}_${suffix}.txt`)
+    descargarBlobDirecto(clasifBlob, `clasif_${id}_${suffix}.txt`)
+  }
+
+  async function onDownloadAppliedTxts() {
+    if (!campaniaId) return
+    try {
+      setExportLoading(true)
+      await descargarTxtPorScope('applied')
+      setToast({
+        show: true,
+        variant: 'success',
+        message: 'TXT de cambios aplicados descargados.'
+      })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudieron descargar los TXT aplicados.'
+      })
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
+  async function onDownloadUnknownTxts() {
+    if (!campaniaId) return
+    try {
+      setExportLoading(true)
+      await descargarTxtPorScope('unknown')
+      setToast({
+        show: true,
+        variant: 'success',
+        message: 'TXT de artículos desconocidos descargados.'
+      })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudieron descargar los TXT de desconocidos.'
+      })
+    } finally {
+      setExportLoading(false)
+    }
   }
 
   // ===== Selección en cola =====
@@ -1487,12 +1535,28 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
               <div>
                 <strong>Consolidación</strong>
                 <div className="text-muted small">
-                  Exportá solo cambios reales y cerrá la campaña cuando esté lista.
+                  Exportá TXT por cambios aplicados o desconocidos y cerrá la campaña cuando esté lista.
                 </div>
               </div>
-              <Button variant="success" onClick={onCloseCampaign} disabled={consolidateLoading}>
-                Cerrar campaña
-              </Button>
+              <div className="d-flex flex-wrap gap-2">
+                <Button
+                  variant="outline-primary"
+                  onClick={onDownloadAppliedTxts}
+                  disabled={exportLoading || consolidateLoading}
+                >
+                  Descargar aplicados (3 TXT)
+                </Button>
+                <Button
+                  variant="outline-warning"
+                  onClick={onDownloadUnknownTxts}
+                  disabled={exportLoading || consolidateLoading}
+                >
+                  Descargar desconocidos (3 TXT)
+                </Button>
+                <Button variant="success" onClick={onCloseCampaign} disabled={consolidateLoading || exportLoading}>
+                  Cerrar campaña
+                </Button>
+              </div>
             </Card.Header>
             <Card.Body>
               {consolidateError && <Alert variant="danger">{consolidateError}</Alert>}
