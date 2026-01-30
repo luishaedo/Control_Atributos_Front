@@ -114,6 +114,20 @@ function getNewAttributeValue(item, field) {
   if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
   return item?.maestro?.clasif_cod || ''
 }
+function descargarBlobDirecto(blob, nombre) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = nombre
+  document.body.appendChild(a); a.click(); a.remove()
+  URL.revokeObjectURL(url)
+}
+function getNewAttributeValue(item, field) {
+  const accepted = getAcceptedAttributeCode(item?.propuestas, field)
+  if (accepted) return accepted
+  if (field === 'categoria_cod') return item?.maestro?.categoria_cod || ''
+  if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
+  return item?.maestro?.clasif_cod || ''
+}
   function descargarBlobDirecto(blob, nombre) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -126,6 +140,11 @@ function getNewAttributeValue(item, field) {
     const blob = await fetchAdminBlobByUrl(url)
     descargarBlobDirecto(blob, nombre)
   }
+
+async function descargarBlobDesdeUrl(url, nombre) {
+  const blob = await fetchAdminBlobByUrl(url)
+  descargarBlobDirecto(blob, nombre)
+}
 
 export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Estado general =====
@@ -339,6 +358,25 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       return next
     })
   }, [orderedEvaluarItems, stageBySku])
+
+  useEffect(() => {
+    setUnknownEdits((prev) => {
+      const next = { ...prev }
+      unknownQueue.forEach((item) => {
+        if (!item?.sku) return
+        const current = next[item.sku] || {}
+        const categoriaTop = buildAttributeOptions(item?.propuestas, 'categoria_cod').options[0]?.code || ''
+        const tipoTop = buildAttributeOptions(item?.propuestas, 'tipo_cod').options[0]?.code || ''
+        const clasifTop = buildAttributeOptions(item?.propuestas, 'clasif_cod').options[0]?.code || ''
+        next[item.sku] = {
+          categoria_cod: current.categoria_cod || categoriaTop || '',
+          tipo_cod: current.tipo_cod || tipoTop || '',
+          clasif_cod: current.clasif_cod || clasifTop || '',
+        }
+      })
+      return next
+    })
+  }, [unknownQueue])
 
   useEffect(() => {
     setStageBySku((prev) => {
@@ -644,43 +682,77 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Acciones tarjetas =====
   async function onDecideAttribute(sku, field, code, decision) {
     const propuesta = { [field]: code }
-    await decidirRevision({
-      campaniaId: Number(campaniaId),
-      sku,
-      propuesta,
-      decision,
-      decidedBy: 'admin@local',
-      aplicarAhora: false
-    })
-    await cargar()
-    setLastActionSku(sku)
-    setCurrentSku(sku)
+    try {
+      await decidirRevision({
+        campaniaId: Number(campaniaId),
+        sku,
+        propuesta,
+        decision,
+        decidedBy: 'admin@local',
+        aplicarAhora: false
+      })
+      await cargar()
+      setLastActionSku(sku)
+      setCurrentSku(sku)
+      setToast({
+        show: true,
+        variant: 'success',
+        message: `Decisión ${decision === 'aceptar' ? 'aceptada' : 'rechazada'} para ${sku}.`
+      })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo guardar la decisión.'
+      })
+    }
   }
   async function onRechazar(sku, prop) {
-    await decidirRevision({
-      campaniaId: Number(campaniaId), sku,
-      propuesta: prop, decision: 'rechazar',
-      decidedBy: 'admin@local'
-    })
-    await cargar()
-    setLastActionSku(sku)
-    setCurrentSku(sku)
+    try {
+      await decidirRevision({
+        campaniaId: Number(campaniaId), sku,
+        propuesta: prop, decision: 'rechazar',
+        decidedBy: 'admin@local'
+      })
+      await cargar()
+      setLastActionSku(sku)
+      setCurrentSku(sku)
+      setToast({
+        show: true,
+        variant: 'success',
+        message: `Propuesta rechazada para ${sku}.`
+      })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo rechazar la propuesta.'
+      })
+    }
   }
   async function onUndoAttributeDecision(decisionId, sku) {
     if (!decisionId) return
-    await undoActualizacion(decisionId)
-    if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
-    setUiMessage({
-      variant: 'info',
-      text: 'Decisión deshecha. Quedó como pendiente nuevamente.'
-    })
-    messageTimeoutRef.current = setTimeout(() => {
-      setUiMessage(null)
-      messageTimeoutRef.current = null
-    }, 4000)
-    await cargar()
-    if (sku) setLastActionSku(sku)
-    setCurrentSku(sku)
+    try {
+      await undoActualizacion(decisionId)
+      if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
+      setUiMessage({
+        variant: 'info',
+        text: 'Decisión deshecha. Quedó como pendiente nuevamente.'
+      })
+      messageTimeoutRef.current = setTimeout(() => {
+        setUiMessage(null)
+        messageTimeoutRef.current = null
+      }, 4000)
+      await cargar()
+      if (sku) setLastActionSku(sku)
+      setCurrentSku(sku)
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo deshacer la decisión.'
+      })
+    }
   }
 
   function mapMissingItem(item) {
@@ -810,20 +882,56 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   async function descargarTxtPorScope(scope, urls = null) {
     const id = Number(campaniaId)
     const suffix = scope || 'applied'
+    const failures = []
+    const recordFailure = (label, error) => {
+      const reason = error?.message || label
+      failures.push(reason)
+    }
     if (urls) {
-      await descargarBlobDesdeUrl(urls.categoria, `categoria_${id}_${suffix}.txt`)
-      await descargarBlobDesdeUrl(urls.tipo, `tipo_${id}_${suffix}.txt`)
-      await descargarBlobDesdeUrl(urls.clasif, `clasif_${id}_${suffix}.txt`)
+      if (!urls.categoria) {
+        recordFailure('categoría')
+      } else {
+        await descargarBlobDesdeUrl(urls.categoria, `categoria_${id}_${suffix}.txt`).catch((e) => {
+          recordFailure('categoría', e)
+        })
+      }
+      if (!urls.tipo) {
+        recordFailure('tipo')
+      } else {
+        await descargarBlobDesdeUrl(urls.tipo, `tipo_${id}_${suffix}.txt`).catch((e) => {
+          recordFailure('tipo', e)
+        })
+      }
+      if (!urls.clasif) {
+        recordFailure('clasif')
+      } else {
+        await descargarBlobDesdeUrl(urls.clasif, `clasif_${id}_${suffix}.txt`).catch((e) => {
+          recordFailure('clasif', e)
+        })
+      }
+      if (failures.length) {
+        throw new Error(`No se pudieron descargar algunos archivos TXT: ${failures.join(', ')}.`)
+      }
       return
     }
-    const [catBlob, tipoBlob, clasifBlob] = await Promise.all([
-      exportTxtCategoria(id, scope),
-      exportTxtTipo(id, scope),
-      exportTxtClasif(id, scope)
-    ])
-    descargarBlobDirecto(catBlob, `categoria_${id}_${suffix}.txt`)
-    descargarBlobDirecto(tipoBlob, `tipo_${id}_${suffix}.txt`)
-    descargarBlobDirecto(clasifBlob, `clasif_${id}_${suffix}.txt`)
+    const catBlob = await exportTxtCategoria(id, scope).catch((e) => {
+      recordFailure('categoría', e)
+      return null
+    })
+    if (catBlob) descargarBlobDirecto(catBlob, `categoria_${id}_${suffix}.txt`)
+    const tipoBlob = await exportTxtTipo(id, scope).catch((e) => {
+      recordFailure('tipo', e)
+      return null
+    })
+    if (tipoBlob) descargarBlobDirecto(tipoBlob, `tipo_${id}_${suffix}.txt`)
+    const clasifBlob = await exportTxtClasif(id, scope).catch((e) => {
+      recordFailure('clasif', e)
+      return null
+    })
+    if (clasifBlob) descargarBlobDirecto(clasifBlob, `clasif_${id}_${suffix}.txt`)
+    if (failures.length) {
+      throw new Error(`No se pudieron descargar algunos archivos TXT: ${failures.join(', ')}.`)
+    }
   }
 
   async function onDownloadAppliedTxts() {
@@ -993,6 +1101,15 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           </Toast.Body>
         </Toast>
       </ToastContainer>
+      {uiMessage && (
+        <Alert
+          variant={uiMessage.variant || 'info'}
+          dismissible
+          onClose={() => setUiMessage(null)}
+        >
+          {uiMessage.text}
+        </Alert>
+      )}
 
       {/* Barra superior común */}
       <Card className="mb-3">
@@ -1365,6 +1482,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                     {unknownQueue.map((item) => {
                       const edits = unknownEdits[item.sku] || {}
                       const ready = isUnknownReady(item.sku)
+                      const categoriaLabel = buildAttributeOptions(item?.propuestas, 'categoria_cod').options[0]
+                      const tipoLabel = buildAttributeOptions(item?.propuestas, 'tipo_cod').options[0]
+                      const clasifLabel = buildAttributeOptions(item?.propuestas, 'clasif_cod').options[0]
                       return (
                         <tr key={item.sku}>
                           <td>{item.sku}</td>
@@ -1379,6 +1499,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                 <option key={c.cod} value={c.cod}>{c.nombre}</option>
                               ))}
                             </Form.Select>
+                            {categoriaLabel?.code && (
+                              <div className="small text-muted mt-1">
+                                Sugerido: {etiquetaNombre(dic?.categorias, categoriaLabel.code)}
+                              </div>
+                            )}
                           </td>
                           <td>
                             <Form.Select
@@ -1391,6 +1516,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                 <option key={t.cod} value={t.cod}>{t.nombre}</option>
                               ))}
                             </Form.Select>
+                            {tipoLabel?.code && (
+                              <div className="small text-muted mt-1">
+                                Sugerido: {etiquetaNombre(dic?.tipos, tipoLabel.code)}
+                              </div>
+                            )}
                           </td>
                           <td>
                             <Form.Select
@@ -1403,6 +1533,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                 <option key={c.cod} value={c.cod}>{c.nombre}</option>
                               ))}
                             </Form.Select>
+                            {clasifLabel?.code && (
+                              <div className="small text-muted mt-1">
+                                Sugerido: {etiquetaNombre(dic?.clasif, clasifLabel.code)}
+                              </div>
+                            )}
                           </td>
                           <td>
                             {ready ? <Badge bg="success">Listo</Badge> : <Badge bg="secondary">Incompleto</Badge>}
