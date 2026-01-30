@@ -62,28 +62,6 @@ function getNewAttributeValue(item, field) {
   if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
   return item?.maestro?.clasif_cod || ''
 }
-  function descargarBlobDirecto(blob, nombre) {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = nombre
-    document.body.appendChild(a); a.click(); a.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  async function descargarBlobDesdeUrl(url, nombre) {
-    const blob = await fetchAdminBlobByUrl(url)
-    descargarBlobDirecto(blob, nombre)
-  }
-
-async function descargarBlobDesdeUrl(url, nombre) {
-  const blob = await fetchAdminBlobByUrl(url)
-  descargarBlobDirecto(blob, nombre)
-}
-
-async function descargarBlobDesdeUrl(url, nombre) {
-  const blob = await fetchAdminBlobByUrl(url)
-  descargarBlobDirecto(blob, nombre)
-}
 
 async function descargarBlobDesdeUrl(url, nombre) {
   const blob = await fetchAdminBlobByUrl(url)
@@ -304,25 +282,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   }, [orderedEvaluarItems, stageBySku])
 
   useEffect(() => {
-    setUnknownEdits((prev) => {
-      const next = { ...prev }
-      unknownQueue.forEach((item) => {
-        if (!item?.sku) return
-        const current = next[item.sku] || {}
-        const categoriaTop = buildAttributeOptions(item?.propuestas, 'categoria_cod').options[0]?.code || ''
-        const tipoTop = buildAttributeOptions(item?.propuestas, 'tipo_cod').options[0]?.code || ''
-        const clasifTop = buildAttributeOptions(item?.propuestas, 'clasif_cod').options[0]?.code || ''
-        next[item.sku] = {
-          categoria_cod: current.categoria_cod || categoriaTop || '',
-          tipo_cod: current.tipo_cod || tipoTop || '',
-          clasif_cod: current.clasif_cod || clasifTop || '',
-        }
-      })
-      return next
-    })
-  }, [unknownQueue])
-
-  useEffect(() => {
     setStageBySku((prev) => {
       const next = { ...prev }
       orderedEvaluarItems.forEach((item) => {
@@ -349,6 +308,25 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     () => orderedEvaluarItems.filter((it) => stageBySku[it.sku] === 'unknown'),
     [orderedEvaluarItems, stageBySku]
   )
+
+  useEffect(() => {
+    setUnknownEdits((prev) => {
+      const next = { ...prev }
+      unknownQueue.forEach((item) => {
+        if (!item?.sku) return
+        const current = next[item.sku] || {}
+        const categoriaTop = buildAttributeOptions(item?.propuestas, 'categoria_cod').options[0]?.code || ''
+        const tipoTop = buildAttributeOptions(item?.propuestas, 'tipo_cod').options[0]?.code || ''
+        const clasifTop = buildAttributeOptions(item?.propuestas, 'clasif_cod').options[0]?.code || ''
+        next[item.sku] = {
+          categoria_cod: current.categoria_cod || categoriaTop || '',
+          tipo_cod: current.tipo_cod || tipoTop || '',
+          clasif_cod: current.clasif_cod || clasifTop || '',
+        }
+      })
+      return next
+    })
+  }, [unknownQueue])
 
   const currentEvaluarItem = useMemo(() => {
     if (!evaluateQueue.length) return null
