@@ -114,18 +114,18 @@ function getNewAttributeValue(item, field) {
   if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
   return item?.maestro?.clasif_cod || ''
 }
-  function descargarBlobDirecto(blob, nombre) {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = nombre
-    document.body.appendChild(a); a.click(); a.remove()
-    URL.revokeObjectURL(url)
-  }
+function descargarBlobDirecto(blob, nombre) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = nombre
+  document.body.appendChild(a); a.click(); a.remove()
+  URL.revokeObjectURL(url)
+}
 
-  async function descargarBlobDesdeUrl(url, nombre) {
-    const blob = await fetchAdminBlobByUrl(url)
-    descargarBlobDirecto(blob, nombre)
-  }
+async function descargarBlobDesdeUrl(url, nombre) {
+  const blob = await fetchAdminBlobByUrl(url)
+  descargarBlobDirecto(blob, nombre)
+}
 
 export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== Estado general =====
@@ -713,19 +713,27 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   }
   async function onUndoAttributeDecision(decisionId, sku) {
     if (!decisionId) return
-    await undoActualizacion(decisionId)
-    if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
-    setUiMessage({
-      variant: 'info',
-      text: 'Decisión deshecha. Quedó como pendiente nuevamente.'
-    })
-    messageTimeoutRef.current = setTimeout(() => {
-      setUiMessage(null)
-      messageTimeoutRef.current = null
-    }, 4000)
-    await cargar()
-    if (sku) setLastActionSku(sku)
-    setCurrentSku(sku)
+    try {
+      await undoActualizacion(decisionId)
+      if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
+      setUiMessage({
+        variant: 'info',
+        text: 'Decisión deshecha. Quedó como pendiente nuevamente.'
+      })
+      messageTimeoutRef.current = setTimeout(() => {
+        setUiMessage(null)
+        messageTimeoutRef.current = null
+      }, 4000)
+      await cargar()
+      if (sku) setLastActionSku(sku)
+      setCurrentSku(sku)
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo deshacer la decisión.'
+      })
+    }
   }
 
   function mapMissingItem(item) {
@@ -855,40 +863,55 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   async function descargarTxtPorScope(scope, urls = null) {
     const id = Number(campaniaId)
     const suffix = scope || 'applied'
+    const failures = []
+    const recordFailure = (label, error) => {
+      const reason = error?.message || label
+      failures.push(reason)
+    }
     if (urls) {
-      const failures = []
-      await descargarBlobDesdeUrl(urls.categoria, `categoria_${id}_${suffix}.txt`).catch((e) => {
-        failures.push(e?.message || 'categoría')
-      })
-      await descargarBlobDesdeUrl(urls.tipo, `tipo_${id}_${suffix}.txt`).catch((e) => {
-        failures.push(e?.message || 'tipo')
-      })
-      await descargarBlobDesdeUrl(urls.clasif, `clasif_${id}_${suffix}.txt`).catch((e) => {
-        failures.push(e?.message || 'clasif')
-      })
+      if (!urls.categoria) {
+        recordFailure('categoría')
+      } else {
+        await descargarBlobDesdeUrl(urls.categoria, `categoria_${id}_${suffix}.txt`).catch((e) => {
+          recordFailure('categoría', e)
+        })
+      }
+      if (!urls.tipo) {
+        recordFailure('tipo')
+      } else {
+        await descargarBlobDesdeUrl(urls.tipo, `tipo_${id}_${suffix}.txt`).catch((e) => {
+          recordFailure('tipo', e)
+        })
+      }
+      if (!urls.clasif) {
+        recordFailure('clasif')
+      } else {
+        await descargarBlobDesdeUrl(urls.clasif, `clasif_${id}_${suffix}.txt`).catch((e) => {
+          recordFailure('clasif', e)
+        })
+      }
       if (failures.length) {
-        throw new Error('No se pudieron descargar algunos archivos TXT.')
+        throw new Error(`No se pudieron descargar algunos archivos TXT: ${failures.join(', ')}.`)
       }
       return
     }
-    const failures = []
     const catBlob = await exportTxtCategoria(id, scope).catch((e) => {
-      failures.push(e?.message || 'categoría')
+      recordFailure('categoría', e)
       return null
     })
     if (catBlob) descargarBlobDirecto(catBlob, `categoria_${id}_${suffix}.txt`)
     const tipoBlob = await exportTxtTipo(id, scope).catch((e) => {
-      failures.push(e?.message || 'tipo')
+      recordFailure('tipo', e)
       return null
     })
     if (tipoBlob) descargarBlobDirecto(tipoBlob, `tipo_${id}_${suffix}.txt`)
     const clasifBlob = await exportTxtClasif(id, scope).catch((e) => {
-      failures.push(e?.message || 'clasif')
+      recordFailure('clasif', e)
       return null
     })
     if (clasifBlob) descargarBlobDirecto(clasifBlob, `clasif_${id}_${suffix}.txt`)
     if (failures.length) {
-      throw new Error('No se pudieron descargar algunos archivos TXT.')
+      throw new Error(`No se pudieron descargar algunos archivos TXT: ${failures.join(', ')}.`)
     }
   }
 
@@ -1059,6 +1082,15 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           </Toast.Body>
         </Toast>
       </ToastContainer>
+      {uiMessage && (
+        <Alert
+          variant={uiMessage.variant || 'info'}
+          dismissible
+          onClose={() => setUiMessage(null)}
+        >
+          {uiMessage.text}
+        </Alert>
+      )}
 
       {/* Barra superior común */}
       <Card className="mb-3">
