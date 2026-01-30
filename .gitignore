@@ -4,3 +4,6 @@ node_modules/
 # Archivos de entorno
 .env
 .env.local
+
+# Builds
+dist/

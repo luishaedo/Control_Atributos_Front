@@ -5,6 +5,7 @@ import SuggestionForm from "./SuggestionForm.jsx";
 import { cleanSku, pad2 } from "../utils/sku.js";
 import { getDictionaries, getMasterBySku, saveScan } from "../services/api.js";
 import { getNombre } from "../utils/texto.js";
+import { hasValidCode } from "../utils/revisionesHelpers.jsx";
 
 export default function ScanBox({ user, campania }) {
   const [dic, setDic] = useState(null);
@@ -13,6 +14,7 @@ export default function ScanBox({ user, campania }) {
   const [resultado, setResultado] = useState(null); // { estado, maestro?, asumidos? }
   const [sugeridos, setSugeridos] = useState({});
   const [guardadoInfo, setGuardadoInfo] = useState(null);
+  const [error, setError] = useState("");
   const inputRef = useRef(null);
   const canScan = Boolean(campania?.activa);
 
@@ -45,6 +47,7 @@ export default function ScanBox({ user, campania }) {
   async function procesar(e) {
     e.preventDefault();
     setGuardadoInfo(null);
+    setError("");
     if (!canScan) return;
     const limpio = cleanSku(skuRaw);
     setSku(limpio);
@@ -67,25 +70,44 @@ export default function ScanBox({ user, campania }) {
   async function guardarYContinuar() {
     if (!resultado || !canScan) return;
     if (!campania?.id) {
-      alert("Seleccioná una campaña activa antes de guardar.");
+      setError("Seleccioná una campaña activa antes de guardar.");
       return;
     }
     if (resultado.estado === "NO_MAESTRO") {
+      if (!dic) {
+        setError("Cargando diccionarios. Esperá un momento y reintentá.");
+        return;
+      }
       const req = ["categoria_cod", "tipo_cod", "clasif_cod"];
       const faltan = req.filter((k) => !sugeridos?.[k]);
       if (faltan.length) {
-        alert("Completa Categoría/Tipo/Clasificación.");
+        setError("Completa Categoría/Tipo/Clasificación.");
+        return;
+      }
+      const invalidCodes = [
+        !hasValidCode(dic?.categorias, sugeridos?.categoria_cod),
+        !hasValidCode(dic?.tipos, sugeridos?.tipo_cod),
+        !hasValidCode(dic?.clasif, sugeridos?.clasif_cod),
+      ];
+      if (invalidCodes.some(Boolean)) {
+        setError("Los códigos sugeridos no existen en los diccionarios.");
         return;
       }
     }
     // Sólo enviamos al back lo necesario (email, sucursal, campaniaId, sku, sugeridos)
-    await saveScan({
-      email: user?.email,
-      sucursal: user?.sucursal,
-      campaniaId: campania?.id,
-      skuRaw: sku,
-      sugeridos,
-    }).catch((e) => alert(e.message || "No se pudo guardar"));
+    try {
+      setError("");
+      await saveScan({
+        email: user?.email,
+        sucursal: user?.sucursal,
+        campaniaId: campania?.id,
+        skuRaw: sku,
+        sugeridos,
+      });
+    } catch (e) {
+      setError(e?.message || "No se pudo guardar.");
+      return;
+    }
     setGuardadoInfo({ sku, at: new Date() });
     setSkuRaw("");
     setSku("");
@@ -158,6 +180,12 @@ export default function ScanBox({ user, campania }) {
             </Col>
           </Row>
         </Form>
+
+        {error && (
+          <Alert variant="danger" className="mt-3">
+            {error}
+          </Alert>
+        )}
 
         {guardadoInfo && (
           <Alert variant="success" className="mt-3">
