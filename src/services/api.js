@@ -1,3 +1,5 @@
+import { pad2 } from "../utils/sku.js";
+
 const API_BASE = (import.meta.env?.VITE_API_URL?.replace(/\/$/, "")) || window.location.origin;
 
 // SIEMPRE pega a /api
@@ -52,15 +54,19 @@ export async function getMaestroList({ q = '', page = 1, pageSize = 50 } = {}) {
 
 
 export async function saveScan({ email, sucursal, campaniaId, skuRaw, sugeridos = {} }) {
+  const normalizeSuggestedCode = (value) => {
+    const trimmed = String(value || "").trim();
+    return trimmed ? pad2(trimmed) : "";
+  };
   const body = {
     email: String(email||'').trim(),
     sucursal: String(sucursal||'').trim(),
     campaniaId: Number(campaniaId||0),
     skuRaw: String(skuRaw||'').trim(),
     sugeridos: {
-      categoria_cod: String(sugeridos.categoria_cod||''),
-      tipo_cod:      String(sugeridos.tipo_cod||''),
-      clasif_cod:    String(sugeridos.clasif_cod||''),
+      categoria_cod: normalizeSuggestedCode(sugeridos.categoria_cod),
+      tipo_cod: normalizeSuggestedCode(sugeridos.tipo_cod),
+      clasif_cod: normalizeSuggestedCode(sugeridos.clasif_cod),
     }
   }
   return fetchJSON(`/escaneos`, { method: "POST", body: JSON.stringify(body) });
