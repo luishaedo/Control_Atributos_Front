@@ -95,6 +95,22 @@ export function getConfirmaciones(campaniaId) {
   return fetchAuthJSON(`/api/admin/confirmaciones?${qsFrom({ campaniaId: id })}`);
 }
 
+export function updateUnknownSku(sku, payload = {}) {
+  if (!sku) throw new Error("sku requerido para updateUnknownSku");
+  return fetchAuthJSON(`/api/admin/desconocidos/${encodeURIComponent(sku)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export function confirmUnknownSku(sku, payload = {}) {
+  if (!sku) throw new Error("sku requerido para confirmUnknownSku");
+  return fetchAuthJSON(`/api/admin/desconocidos/${encodeURIComponent(sku)}/confirmar`, {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
 // ======================= Consolidación
 export function getConsolidacionCambios(campaniaId) {
   const id = assertHasCampaignId(campaniaId, "getConsolidacionCambios");
