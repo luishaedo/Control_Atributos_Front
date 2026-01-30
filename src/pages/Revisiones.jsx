@@ -121,6 +121,25 @@ function descargarBlobDirecto(blob, nombre) {
   document.body.appendChild(a); a.click(); a.remove()
   URL.revokeObjectURL(url)
 }
+function getNewAttributeValue(item, field) {
+  const accepted = getAcceptedAttributeCode(item?.propuestas, field)
+  if (accepted) return accepted
+  if (field === 'categoria_cod') return item?.maestro?.categoria_cod || ''
+  if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
+  return item?.maestro?.clasif_cod || ''
+}
+  function descargarBlobDirecto(blob, nombre) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = nombre
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function descargarBlobDesdeUrl(url, nombre) {
+    const blob = await fetchAdminBlobByUrl(url)
+    descargarBlobDirecto(blob, nombre)
+  }
 
 async function descargarBlobDesdeUrl(url, nombre) {
   const blob = await fetchAdminBlobByUrl(url)
@@ -1286,6 +1305,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                             ? it.maestro?.tipo_cod
                             : it.maestro?.clasif_cod
                         const acceptedCode = getAcceptedAttributeCode(it.propuestas, field)
+                        const isLocked = Boolean(acceptedCode)
                         const meta = buildAttributeOptions(it.propuestas, field)
                         const filteredOptions = meta.options.filter((opt) => String(opt.code) !== String(maestroCode))
                         const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
@@ -1318,6 +1338,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                 <div className="fw-semibold">{label}</div>
                                 <div className="text-muted small">{meta.total} votos</div>
                               </div>
+                              {isLocked && (
+                                <div className="text-muted small mt-1">
+                                  Deshacé la decisión para evaluar otra opción.
+                                </div>
+                              )}
                               <div className="mt-2 d-flex flex-column gap-2">
                                 {filteredOptions.map((opt) => {
                                   const consensus = consensusLabel(opt.share)
