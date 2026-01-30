@@ -1188,6 +1188,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                             ? it.maestro?.tipo_cod
                             : it.maestro?.clasif_cod
                         const acceptedCode = getAcceptedAttributeCode(it.propuestas, field)
+                        const isLocked = Boolean(acceptedCode)
                         const meta = buildAttributeOptions(it.propuestas, field)
                         const filteredOptions = meta.options.filter((opt) => String(opt.code) !== String(maestroCode))
                         const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
@@ -1220,6 +1221,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                 <div className="fw-semibold">{label}</div>
                                 <div className="text-muted small">{meta.total} votos</div>
                               </div>
+                              {isLocked && (
+                                <div className="text-muted small mt-1">
+                                  Deshacé la decisión para evaluar otra opción.
+                                </div>
+                              )}
                               <div className="mt-2 d-flex flex-column gap-2">
                                 {filteredOptions.map((opt) => {
                                   const consensus = consensusLabel(opt.share)
