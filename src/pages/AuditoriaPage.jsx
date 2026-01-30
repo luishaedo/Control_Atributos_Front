@@ -2,14 +2,10 @@ import { useNavigate } from 'react-router-dom'
 import React, { useEffect, useMemo, useState } from 'react'
 import DiscrepanciasTabla from '../components/DiscrepanciasTabla'
 import DiscrepanciasSucursalesTabla from '../components/DiscrepanciasSucursalesTabla'
-import {
-  apiGetDiscrepancias,
-  apiGetDiscrepanciasSucursales,
-  apiListCampanias,
-  apiExportDiscrepanciasCSV
-} from '../api/auditoria'
+import { getCampaigns } from '../services/api'
+import { getDiscrepancias, getDiscrepanciasSucursales, exportDiscrepanciasCSV } from '../services/adminApi'
 
-export default function AuditoriaPage({ adminToken = '' }) {
+export default function AuditoriaPage() {
   const [campaniaId, setCampaniaId] = useState('')
   const [campanias, setCampanias] = useState([])
   const [sku, setSku] = useState('')
@@ -23,14 +19,11 @@ export default function AuditoriaPage({ adminToken = '' }) {
 
   const navigate = useNavigate()
 
-  // token: prop -> localStorage
-  const token = adminToken || localStorage.getItem('cc_admin_token') || ''
-
   // detectar campaña activa al montar
   useEffect(() => {
     (async () => {
       try {
-        const list = await apiListCampanias()
+        const list = await getCampaigns()
         setCampanias(list || [])
         const activa = (list || []).find(c => c.activa)
         if (activa && !campaniaId) setCampaniaId(String(activa.id))
@@ -46,8 +39,8 @@ export default function AuditoriaPage({ adminToken = '' }) {
     setLoading(true); setError('')
     try {
       const [m, s] = await Promise.all([
-        apiGetDiscrepancias({ campaniaId, sku, minVotos, token }),
-        apiGetDiscrepanciasSucursales({ campaniaId, sku, minSucursales, token }),
+        getDiscrepancias(Number(campaniaId), { sku, minVotos }),
+        getDiscrepanciasSucursales(Number(campaniaId), { sku, minSucursales }),
       ])
       setDataM(m.items || [])
       setDataS(s.items || [])
@@ -167,7 +160,17 @@ export default function AuditoriaPage({ adminToken = '' }) {
           <DiscrepanciasTabla
             data={dataM}
             loading={loading}
-            onExportCSV={() => apiExportDiscrepanciasCSV(campaniaId)}
+            onExportCSV={async () => {
+              const blob = await exportDiscrepanciasCSV(Number(campaniaId))
+              const url = URL.createObjectURL(blob)
+              const link = document.createElement('a')
+              link.href = url
+              link.download = `discrepancias_campania_${campaniaId}.csv`
+              document.body.appendChild(link)
+              link.click()
+              link.remove()
+              URL.revokeObjectURL(url)
+            }}
             exportLabel="Exportar discrepancias vs maestro (CSV)"
           />
         )
