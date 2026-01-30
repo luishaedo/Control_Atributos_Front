@@ -111,6 +111,34 @@ export function confirmUnknownSku(sku, payload = {}) {
   });
 }
 
+export function updateUnknown(payload = {}) {
+  return fetchAuthJSON(`/api/admin/desconocidos`, {
+    method: "PATCH",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export function confirmUnknown(payload = {}) {
+  return fetchAuthJSON(`/api/admin/desconocidos/confirmar`, {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export function rejectUnknown(payload = {}) {
+  return fetchAuthJSON(`/api/admin/desconocidos/reject`, {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export function mergeUnknown(payload = {}) {
+  return fetchAuthJSON(`/api/admin/desconocidos/merge`, {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
 // ======================= Consolidación
 export function getConsolidacionCambios(campaniaId) {
   const id = assertHasCampaignId(campaniaId, "getConsolidacionCambios");

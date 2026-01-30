@@ -46,6 +46,7 @@ import {
   // TXT
   exportTxtCategoria, exportTxtTipo, exportTxtClasif, exportSummaryTxt, fetchAdminBlobByUrl,
   updateUnknownSku, confirmUnknownSku,
+  updateUnknown, confirmUnknown, rejectUnknown, mergeUnknown,
 } from '../services/adminApi'
 
 // ===== Helpers =====
@@ -259,6 +260,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       const next = { ...prev }
       orderedEvaluarItems.forEach((item) => {
         if (next[item.sku]) return
+        const skuType = String(item?.skuType || '').toUpperCase()
+        if (skuType) {
+          next[item.sku] = skuType === 'UNKNOWN' ? 'unknown' : (getChangeCountForItem(item) === 0 ? 'confirm' : 'evaluate')
+          return
+        }
         const missingMaestro = !item?.maestro?.categoria_cod && !item?.maestro?.tipo_cod && !item?.maestro?.clasif_cod
         if (missingMaestro) {
           next[item.sku] = 'unknown'
@@ -455,6 +461,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     }))
   }
 
+  function resolveUnknownId(item) {
+    if (!item) return ''
+    return String(item.unknownId || item?.unknown?.id || '').trim()
+  }
+
   function onMarkReady(item) {
     if (!item?.sku) return
     setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
@@ -464,7 +475,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   async function onMoveUnknownToConfirm(item) {
     if (!item?.sku) return
     if (!isUnknownReady(item.sku)) return
+    const unknownId = resolveUnknownId(item)
     const payload = {
+      ...(unknownId ? { unknownId } : { sku: item.sku, campaniaId: Number(campaniaId) }),
       campaniaId: Number(campaniaId),
       categoria_cod: unknownEdits[item.sku]?.categoria_cod || '',
       tipo_cod: unknownEdits[item.sku]?.tipo_cod || '',
@@ -472,11 +485,16 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       updatedBy: 'admin@local',
     }
     try {
-      await updateUnknownSku(item.sku, payload)
-      await confirmUnknownSku(item.sku, {
-        campaniaId: Number(campaniaId),
-        updatedBy: 'admin@local',
-      })
+      if (unknownId) {
+        await updateUnknown(payload)
+        await confirmUnknown({ unknownId, campaniaId: Number(campaniaId), updatedBy: 'admin@local' })
+      } else {
+        await updateUnknownSku(item.sku, payload)
+        await confirmUnknownSku(item.sku, {
+          campaniaId: Number(campaniaId),
+          updatedBy: 'admin@local',
+        })
+      }
       await Promise.all([cargar(), loadConfirmaciones()])
       setToast({
         show: true,
@@ -488,6 +506,54 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
         show: true,
         variant: 'danger',
         message: e?.message || 'No se pudo enviar el SKU a confirmación.'
+      })
+    }
+  }
+
+  async function onRejectUnknown(item) {
+    if (!item?.sku) return
+    const reason = window.prompt('Motivo de rechazo (opcional):')
+    if (reason === null) return
+    const unknownId = resolveUnknownId(item)
+    const payload = {
+      ...(unknownId ? { unknownId } : { sku: item.sku, campaniaId: Number(campaniaId) }),
+      campaniaId: Number(campaniaId),
+      reason: reason || '',
+      updatedBy: 'admin@local',
+    }
+    try {
+      await rejectUnknown(payload)
+      await Promise.all([cargar(), loadConfirmaciones()])
+      setToast({ show: true, variant: 'success', message: `SKU ${item.sku} rechazado.` })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo rechazar el SKU.'
+      })
+    }
+  }
+
+  async function onMergeUnknown(item) {
+    if (!item?.sku) return
+    const targetSku = window.prompt('SKU destino para merge:')
+    if (!targetSku) return
+    const unknownId = resolveUnknownId(item)
+    const payload = {
+      ...(unknownId ? { unknownId } : { sku: item.sku, campaniaId: Number(campaniaId) }),
+      campaniaId: Number(campaniaId),
+      targetSku: String(targetSku).trim().toUpperCase(),
+      updatedBy: 'admin@local',
+    }
+    try {
+      await mergeUnknown(payload)
+      await Promise.all([cargar(), loadConfirmaciones()])
+      setToast({ show: true, variant: 'success', message: `SKU ${item.sku} mergeado.` })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo mergear el SKU.'
       })
     }
   }
@@ -1422,13 +1488,14 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                       <th>Tipo</th>
                       <th>Clasificación</th>
                       <th>Estado</th>
-                      <th></th>
+                      <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {unknownQueue.map((item) => {
                       const edits = unknownEdits[item.sku] || {}
                       const ready = isUnknownReady(item.sku)
+                      const unknownId = resolveUnknownId(item)
                       const categoriaLabel = buildAttributeOptions(item?.propuestas, 'categoria_cod').options[0]
                       const tipoLabel = buildAttributeOptions(item?.propuestas, 'tipo_cod').options[0]
                       const clasifLabel = buildAttributeOptions(item?.propuestas, 'clasif_cod').options[0]
@@ -1488,8 +1555,26 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                           </td>
                           <td>
                             {ready ? <Badge bg="success">Listo</Badge> : <Badge bg="secondary">Incompleto</Badge>}
+                            {unknownId ? (
+                              <div className="small text-muted mt-1">Unknown ID: {unknownId}</div>
+                            ) : null}
                           </td>
                           <td className="text-end">
+                            <div className="d-flex flex-wrap justify-content-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                onClick={() => onRejectUnknown(item)}
+                              >
+                                Rechazar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-secondary"
+                                onClick={() => onMergeUnknown(item)}
+                              >
+                                Merge
+                              </Button>
                             <Button
                               size="sm"
                               variant="success"
@@ -1498,6 +1583,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                             >
                               Enviar a Confirmación
                             </Button>
+                            </div>
                           </td>
                         </tr>
                       )
