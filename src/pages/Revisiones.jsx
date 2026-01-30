@@ -24,6 +24,18 @@ import {
 import { getDictionaries } from '../services/api'
 import { pad2 } from '../utils/sku'
 import {
+  badgeDecision,
+  buildAttributeOptions,
+  consensusLabel,
+  etiqueta,
+  etiquetaNombre,
+  getAcceptedAttributeCode,
+  getAcceptedAttributeDecision,
+  hasValidCode,
+  resolveAttributeValue,
+  shortUserLabel,
+} from '../utils/revisionesHelpers.jsx'
+import {
   // Revisiones
   getRevisiones, decidirRevision,
   importarMaestroJSON, getMissingMaestro,
@@ -36,85 +48,6 @@ import {
 } from '../services/adminApi'
 
 // ===== Helpers =====
-function etiqueta(dicArr, cod) {
-  if (!cod) return '—'
-  const c = pad2(cod)
-  const it = (dicArr || []).find(x => x.cod === c)
-  return it ? `${c} · ${it.nombre}` : c
-}
-function etiquetaNombre(dicArr, cod) {
-  if (!cod) return '—'
-  const c = pad2(cod)
-  const it = (dicArr || []).find(x => x.cod === c)
-  return it ? it.nombre : c
-}
-function shortUserLabel(value = '') {
-  const str = String(value || '')
-  if (!str) return '—'
-  const [name] = str.split('@')
-  return name || str
-}
-function badgeDecision(estado) {
-  if (estado === 'aplicada')   return <Badge bg="success">APLICADA</Badge>
-  if (estado === 'pendiente')  return <Badge bg="warning" text="dark">ACEPTADA (pend.)</Badge>
-  if (estado === 'rechazada')  return <Badge bg="danger">RECHAZADA</Badge>
-  return <Badge bg="secondary">—</Badge>
-}
-const CONSENSUS_THRESHOLD = 0.6
-function buildAttributeOptions(propuestas = [], field) {
-  const map = new Map()
-  for (const p of propuestas) {
-    const code = p?.[field]
-    if (!code) continue
-    const entry = map.get(code) || { code, count: 0, usuarios: new Set(), sucursales: new Set() }
-    entry.count += Number(p.count || 0)
-    ;(p.usuarios || []).forEach(u => entry.usuarios.add(u))
-    ;(p.sucursales || []).forEach(s => entry.sucursales.add(s))
-    map.set(code, entry)
-  }
-  const list = Array.from(map.values())
-    .sort((a, b) => b.count - a.count)
-    .map(item => ({
-      ...item,
-      usuarios: Array.from(item.usuarios),
-      sucursales: Array.from(item.sucursales),
-    }))
-  const total = list.reduce((acc, it) => acc + it.count, 0)
-  return {
-    total,
-    options: list.map(item => ({
-      ...item,
-      share: total ? item.count / total : 0
-    }))
-  }
-}
-function consensusLabel(share) {
-  const pct = Math.round(share * 100)
-  if (share >= CONSENSUS_THRESHOLD) return { text: `Consenso ${pct}%`, variant: 'success' }
-  if (share > 0) return { text: `${pct}%`, variant: 'warning' }
-  return { text: 'Sin votos', variant: 'secondary' }
-}
-function getAcceptedAttributeCode(propuestas = [], field) {
-  const accepted = propuestas.find((p) => p?.decision && p?.decision?.estado !== 'rechazada' && p?.[field])
-  return accepted?.[field] || ''
-}
-function getAcceptedAttributeDecision(propuestas = [], field) {
-  const accepted = propuestas.find((p) => p?.decision && p?.decision?.estado !== 'rechazada' && p?.[field])
-  return accepted?.decision || null
-}
-function hasValidCode(dicArr, code) {
-  if (!code) return false
-  const normalized = pad2(code)
-  return (dicArr || []).some((item) => item.cod === normalized)
-}
-function resolveAttributeValue(item, field) {
-function getNewAttributeValue(item, field) {
-  const accepted = getAcceptedAttributeCode(item?.propuestas, field)
-  if (accepted) return accepted
-  if (field === 'categoria_cod') return item?.maestro?.categoria_cod || ''
-  if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
-  return item?.maestro?.clasif_cod || ''
-}
 function descargarBlobDirecto(blob, nombre) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -141,6 +74,11 @@ function getNewAttributeValue(item, field) {
     const blob = await fetchAdminBlobByUrl(url)
     descargarBlobDirecto(blob, nombre)
   }
+
+async function descargarBlobDesdeUrl(url, nombre) {
+  const blob = await fetchAdminBlobByUrl(url)
+  descargarBlobDirecto(blob, nombre)
+}
 
 async function descargarBlobDesdeUrl(url, nombre) {
   const blob = await fetchAdminBlobByUrl(url)
@@ -503,7 +441,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     const overrides = unknownEdits[item.sku] || {}
     if (overrides[field]) return overrides[field]
     return resolveAttributeValue(item, field)
-    return getNewAttributeValue(item, field)
   }
 
   function getChangeCountForItem(item) {
@@ -527,165 +464,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       hasValidCode(dic?.tipos, edits.tipo_cod) &&
       hasValidCode(dic?.clasif, edits.clasif_cod)
     )
-  }
-
-  function onUpdateUnknown(sku, field, value) {
-    setUnknownEdits((prev) => ({
-      ...prev,
-      [sku]: {
-        ...(prev[sku] || {}),
-        [field]: value
-      }
-    }))
-  }
-
-  function onMarkReady(item) {
-    if (!item?.sku) return
-    setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
-    setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
-  }
-
-  function onMoveUnknownToConfirm(item) {
-    if (!item?.sku) return
-    if (!isUnknownReady(item.sku)) return
-    setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
-    setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
-  }
-
-  function onToggleConfirmFlag(sku, value) {
-    setConfirmFlags((prev) => ({ ...prev, [sku]: value }))
-  }
-
-  function onApplyConfirmation() {
-    setStageBySku((prev) => {
-      const next = { ...prev }
-      confirmQueue.forEach((item) => {
-        const shouldConfirm = confirmFlags[item.sku] !== false
-        next[item.sku] = shouldConfirm ? 'consolidate' : 'evaluate'
-      })
-      return next
-    })
-    setActiveTab('consolidate')
-    loadConsolidacion()
-  }
-
-  function buildSummary() {
-    const statsByUser = {}
-    const items = consolidateQueue.map((item) => {
-      const fields = ['categoria_cod', 'tipo_cod', 'clasif_cod']
-      const changes = fields.map((field) => {
-        const original = field === 'categoria_cod'
-          ? item?.maestro?.categoria_cod
-          : field === 'tipo_cod'
-            ? item?.maestro?.tipo_cod
-            : item?.maestro?.clasif_cod
-        const nextValue = getEffectiveValue(item, field)
-        return {
-          field,
-          oldValue: original || '',
-          newValue: nextValue || ''
-        }
-      })
-      item?.propuestas?.forEach((p) => {
-        ;(p.usuarios || []).forEach((u) => {
-          statsByUser[u] = (statsByUser[u] || 0) + 1
-        })
-      })
-      return { sku: item.sku, changes }
-    })
-    const totalSkus = consolidateQueue.length
-    const updatedSkus = consolidateQueue.filter((item) => getChangeCountForItem(item) > 0).length
-    const verifiedSkus = consolidateQueue.filter((item) => getChangeCountForItem(item) === 0).length
-    return {
-      totalSkus,
-      updatedSkus,
-      verifiedSkus,
-      statsByUser,
-      items
-    }
-  }
-
-  function exportSummaryFiles(summary) {
-    const header = [
-      `Campaña: ${campaniaId || '—'}`,
-      `Total SKUs: ${summary.totalSkus}`,
-      `Actualizados: ${summary.updatedSkus}`,
-      `Verificados: ${summary.verifiedSkus}`
-    ]
-    const statsLines = Object.entries(summary.statsByUser).map(([email, count]) => `${email}\t${count}`)
-    const skuLines = summary.items.flatMap((item) =>
-      item.changes.map((change) => `${item.sku}\t${change.field}\t${change.oldValue}\t${change.newValue}`)
-    )
-    const txtBody = [
-      'RESUMEN',
-      ...header,
-      '',
-      'ESTADISTICAS POR USUARIO',
-      ...statsLines,
-      '',
-      'SKU / CAMBIOS',
-      ...skuLines
-    ].join('\n')
-    const txtBlob = new Blob([`\ufeff${txtBody}`], { type: 'text/plain;charset=utf-8' })
-    descargarBlobDirecto(txtBlob, `campania_${campaniaId}_resumen.txt`)
-
-    const csvLines = [
-      ['section', 'key', 'value'].join(','),
-      ...header.map((line) => ['summary', ...line.split(': ').map((v) => `"${v}"`)].join(',')),
-      '',
-      ['section', 'email', 'count'].join(','),
-      ...Object.entries(summary.statsByUser).map(([email, count]) => `stats,${email},${count}`),
-      '',
-      ['section', 'sku', 'field', 'old_value', 'new_value'].join(','),
-      ...summary.items.flatMap((item) =>
-        item.changes.map((change) =>
-          `changes,${item.sku},${change.field},${change.oldValue},${change.newValue}`
-        )
-      )
-    ].join('\n')
-    const csvBlob = new Blob([`\ufeff${csvLines}`], { type: 'text/csv;charset=utf-8' })
-    descargarBlobDirecto(csvBlob, `campania_${campaniaId}_resumen.csv`)
-  }
-
-  async function onCloseCampaign() {
-    try {
-      const response = await cerrarCampania(Number(campaniaId))
-      if (response?.summary) {
-        setCloseSummary(response.summary)
-      } else {
-        setCloseSummary(null)
-        setToast({
-          show: true,
-          variant: 'warning',
-          message: 'La campaña se cerró, pero no se recibió el resumen.'
-        })
-      }
-
-      const exports = response?.exports || {}
-      setExportLoading(true)
-      try {
-        await descargarTxtPorScope('applied', exports.applied || null)
-        await descargarTxtPorScope('unknown', exports.unknown || null)
-        if (exports.summaryTxt) {
-          await descargarBlobDesdeUrl(exports.summaryTxt, `summary_campania_${campaniaId}.txt`)
-        } else {
-          const summaryBlob = await exportSummaryTxt(Number(campaniaId))
-          descargarBlobDirecto(summaryBlob, `summary_campania_${campaniaId}.txt`)
-        }
-      } finally {
-        setExportLoading(false)
-      }
-
-      loadConsolidacion()
-    } catch (e) {
-      setToast({
-        show: true,
-        variant: 'danger',
-        message: e?.message || 'No se pudo cerrar la campaña.'
-      })
-    }
-  }
-
   }
 
   function onUpdateUnknown(sku, field, value) {
@@ -1840,18 +1618,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 </div>
               </div>
               <div className="d-flex flex-wrap gap-2">
-                <Button
-                  variant="outline-primary"
-                  onClick={onDownloadAppliedTxts}
-                  disabled={exportLoading || consolidateLoading}
-                >
-                  Descargar aplicados (3 TXT)
-                </Button>
-                <Button
-                  variant="outline-warning"
-                  onClick={onDownloadUnknownTxts}
-                  disabled={exportLoading || consolidateLoading}
-                >
                 <Button
                   variant="outline-primary"
                   onClick={onDownloadAppliedTxts}
