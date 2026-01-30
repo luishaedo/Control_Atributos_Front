@@ -10,6 +10,9 @@ import {
   Badge,
   Stack,
   Table,
+  Accordion,
+  OverlayTrigger,
+  Tooltip,
   Dropdown,
   ButtonGroup,
   Tabs,
@@ -23,11 +26,13 @@ import { pad2 } from '../utils/sku'
 import {
   // Revisiones
   getRevisiones, decidirRevision,
+  importarMaestroJSON, getMissingMaestro,
+  getConfirmaciones, getConsolidacionCambios, cerrarCampania,
   // Cola
   listarActualizaciones, exportActualizacionesCSV, aplicarActualizaciones,
   archivarActualizaciones, undoActualizacion, revertirActualizacion,
   // TXT
-  exportTxtCategoria, exportTxtTipo, exportTxtClasif,
+  exportTxtCategoria, exportTxtTipo, exportTxtClasif, exportSummaryTxt, fetchAdminBlobByUrl,
 } from '../services/adminApi'
 
 // ===== Helpers =====
@@ -36,6 +41,18 @@ function etiqueta(dicArr, cod) {
   const c = pad2(cod)
   const it = (dicArr || []).find(x => x.cod === c)
   return it ? `${c} · ${it.nombre}` : c
+}
+function etiquetaNombre(dicArr, cod) {
+  if (!cod) return '—'
+  const c = pad2(cod)
+  const it = (dicArr || []).find(x => x.cod === c)
+  return it ? it.nombre : c
+}
+function shortUserLabel(value = '') {
+  const str = String(value || '')
+  if (!str) return '—'
+  const [name] = str.split('@')
+  return name || str
 }
 function badgeDecision(estado) {
   if (estado === 'aplicada')   return <Badge bg="success">APLICADA</Badge>
@@ -81,12 +98,33 @@ function getAcceptedAttributeCode(propuestas = [], field) {
   const accepted = propuestas.find((p) => p?.decision && p?.decision?.estado !== 'rechazada' && p?.[field])
   return accepted?.[field] || ''
 }
+function getAcceptedAttributeDecision(propuestas = [], field) {
+  const accepted = propuestas.find((p) => p?.decision && p?.decision?.estado !== 'rechazada' && p?.[field])
+  return accepted?.decision || null
+}
+function hasValidCode(dicArr, code) {
+  if (!code) return false
+  const normalized = pad2(code)
+  return (dicArr || []).some((item) => item.cod === normalized)
+}
+function resolveAttributeValue(item, field) {
+  const accepted = getAcceptedAttributeCode(item?.propuestas, field)
+  if (accepted) return accepted
+  if (field === 'categoria_cod') return item?.maestro?.categoria_cod || ''
+  if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
+  return item?.maestro?.clasif_cod || ''
+}
 function descargarBlobDirecto(blob, nombre) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url; a.download = nombre
   document.body.appendChild(a); a.click(); a.remove()
   URL.revokeObjectURL(url)
+}
+
+async function descargarBlobDesdeUrl(url, nombre) {
+  const blob = await fetchAdminBlobByUrl(url)
+  descargarBlobDirecto(blob, nombre)
 }
 
 export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
@@ -117,6 +155,24 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [archiveLoading, setArchiveLoading] = useState(false)
   const [lastExportKind, setLastExportKind] = useState('')
   const [lastActionSku, setLastActionSku] = useState('')
+  const [currentSku, setCurrentSku] = useState('')
+  const [evaluarOrder, setEvaluarOrder] = useState([])
+  const [evaluarNotice, setEvaluarNotice] = useState('')
+  const [stageBySku, setStageBySku] = useState({})
+  const [confirmFlags, setConfirmFlags] = useState({})
+  const [activeEvalTab, setActiveEvalTab] = useState('pending')
+  const [closeSummary, setCloseSummary] = useState(null)
+  const [unknownEdits, setUnknownEdits] = useState({})
+  const [missingItems, setMissingItems] = useState([])
+  const [missingLoading, setMissingLoading] = useState(false)
+  const [missingError, setMissingError] = useState('')
+  const [exportLoading, setExportLoading] = useState(false)
+  const [confirmItems, setConfirmItems] = useState([])
+  const [confirmLoading, setConfirmLoading] = useState(false)
+  const [confirmError, setConfirmError] = useState('')
+  const [consolidateItems, setConsolidateItems] = useState([])
+  const [consolidateLoading, setConsolidateLoading] = useState(false)
+  const [consolidateError, setConsolidateError] = useState('')
 
   // Filtros por columna (client-side)
   const [fSKU, setFSKU] = useState('')
@@ -160,11 +216,71 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     setSeleccion(sel => sel.filter(id => (acts.items || []).some(a => a.id === id)))
   }
 
+  async function loadMissingItems() {
+    if (!authOK || !campaniaId) return
+    try {
+      setMissingLoading(true)
+      setMissingError('')
+      const data = await getMissingMaestro(Number(campaniaId))
+      setMissingItems(data.items || [])
+    } catch (e) {
+      setMissingError(e?.message || 'No se pudieron cargar los artículos faltantes en maestro.')
+    } finally {
+      setMissingLoading(false)
+    }
+  }
+
+  async function loadConfirmaciones() {
+    if (!authOK || !campaniaId) return
+    try {
+      setConfirmLoading(true)
+      setConfirmError('')
+      const data = await getConfirmaciones(Number(campaniaId))
+      setConfirmItems(data.items || [])
+    } catch (e) {
+      setConfirmError(e?.message || 'No se pudieron cargar las confirmaciones.')
+    } finally {
+      setConfirmLoading(false)
+    }
+  }
+
+  async function loadConsolidacion() {
+    if (!authOK || !campaniaId) return
+    try {
+      setConsolidateLoading(true)
+      setConsolidateError('')
+      const data = await getConsolidacionCambios(Number(campaniaId))
+      setConsolidateItems(data.items || [])
+    } catch (e) {
+      setConsolidateError(e?.message || 'No se pudieron cargar los cambios de consolidación.')
+    } finally {
+      setConsolidateLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!authOK || !campaniaId) return
     cargar().catch(e => console.error('[Revisiones] cargar error', e))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaniaId, authOK, colaEstado, colaArchivada, soloDif, consenso, sku])
+
+  useEffect(() => {
+    if (activeTab !== 'export') return
+    loadMissingItems()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, campaniaId, authOK])
+
+  useEffect(() => {
+    if (activeTab !== 'confirm') return
+    loadConfirmaciones()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, campaniaId, authOK])
+
+  useEffect(() => {
+    if (activeTab !== 'consolidate') return
+    loadConsolidacion()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, campaniaId, authOK])
 
   useEffect(() => () => {
     if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
@@ -179,63 +295,485 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       .filter((it) => it.propsFiltradas.length > 0)
   ), [items, filtroDecision])
 
-  const itemIndexBySku = useMemo(() => {
-    const map = new Map()
-    ;(items || []).forEach((it, idx) => map.set(it.sku, idx))
-    return map
-  }, [items])
+  useEffect(() => {
+    setEvaluarOrder((prev) => {
+      const skus = evaluarItems.map((it) => it.sku)
+      const kept = prev.filter((sku) => skus.includes(sku))
+      const missing = skus.filter((sku) => !kept.includes(sku))
+      return [...kept, ...missing]
+    })
+  }, [evaluarItems])
+
+  const orderedEvaluarItems = useMemo(() => {
+    if (!evaluarOrder.length) return evaluarItems
+    const map = new Map(evaluarItems.map((it) => [it.sku, it]))
+    const ordered = evaluarOrder.map((sku) => map.get(sku)).filter(Boolean)
+    const remaining = evaluarItems.filter((it) => !evaluarOrder.includes(it.sku))
+    return [...ordered, ...remaining]
+  }, [evaluarItems, evaluarOrder])
+
+  useEffect(() => {
+    setStageBySku((prev) => {
+      const next = { ...prev }
+      orderedEvaluarItems.forEach((item) => {
+        if (next[item.sku]) return
+        const missingMaestro = !item?.maestro?.categoria_cod && !item?.maestro?.tipo_cod && !item?.maestro?.clasif_cod
+        if (missingMaestro) {
+          next[item.sku] = 'unknown'
+          return
+        }
+        const changes = getChangeCountForItem(item)
+        next[item.sku] = changes === 0 ? 'confirm' : 'evaluate'
+      })
+      return next
+    })
+  }, [orderedEvaluarItems])
+
+  useEffect(() => {
+    setConfirmFlags((prev) => {
+      const next = { ...prev }
+      orderedEvaluarItems.forEach((item) => {
+        if (stageBySku[item.sku] !== 'confirm') return
+        if (next[item.sku] === undefined) next[item.sku] = true
+      })
+      return next
+    })
+  }, [orderedEvaluarItems, stageBySku])
+
+  useEffect(() => {
+    setUnknownEdits((prev) => {
+      const next = { ...prev }
+      unknownQueue.forEach((item) => {
+        if (!item?.sku) return
+        const current = next[item.sku] || {}
+        const categoriaTop = buildAttributeOptions(item?.propuestas, 'categoria_cod').options[0]?.code || ''
+        const tipoTop = buildAttributeOptions(item?.propuestas, 'tipo_cod').options[0]?.code || ''
+        const clasifTop = buildAttributeOptions(item?.propuestas, 'clasif_cod').options[0]?.code || ''
+        next[item.sku] = {
+          categoria_cod: current.categoria_cod || categoriaTop || '',
+          tipo_cod: current.tipo_cod || tipoTop || '',
+          clasif_cod: current.clasif_cod || clasifTop || '',
+        }
+      })
+      return next
+    })
+  }, [unknownQueue])
+
+  useEffect(() => {
+    setStageBySku((prev) => {
+      const next = { ...prev }
+      orderedEvaluarItems.forEach((item) => {
+        if (next[item.sku] !== 'evaluate') return
+        if (getChangeCountForItem(item) === 0) next[item.sku] = 'confirm'
+      })
+      return next
+    })
+  }, [orderedEvaluarItems])
+
+  const evaluateQueue = useMemo(
+    () => orderedEvaluarItems.filter((it) => stageBySku[it.sku] === 'evaluate'),
+    [orderedEvaluarItems, stageBySku]
+  )
+  const confirmQueue = useMemo(
+    () => orderedEvaluarItems.filter((it) => stageBySku[it.sku] === 'confirm'),
+    [orderedEvaluarItems, stageBySku]
+  )
+  const consolidateQueue = useMemo(
+    () => orderedEvaluarItems.filter((it) => stageBySku[it.sku] === 'consolidate'),
+    [orderedEvaluarItems, stageBySku]
+  )
+  const unknownQueue = useMemo(
+    () => orderedEvaluarItems.filter((it) => stageBySku[it.sku] === 'unknown'),
+    [orderedEvaluarItems, stageBySku]
+  )
+
+  const currentEvaluarItem = useMemo(() => {
+    if (!evaluateQueue.length) return null
+    if (currentSku) {
+      const found = evaluateQueue.find((it) => it.sku === currentSku)
+      if (found) return found
+    }
+    return evaluateQueue[0]
+  }, [currentSku, evaluateQueue])
+
+  useEffect(() => {
+    if (orderedEvaluarItems.length) setEvaluarNotice('')
+  }, [orderedEvaluarItems.length])
 
   useEffect(() => {
     if (!lastActionSku || activeTab !== 'revisiones') return
-    if (!evaluarItems.length) return
+    if (!evaluateQueue.length) return
 
     let targetSku = lastActionSku
-    const sameSkuItem = evaluarItems.find((it) => it.sku === lastActionSku)
-    if (!sameSkuItem) {
-      const lastIndex = itemIndexBySku.get(lastActionSku)
-      const nextItem = evaluarItems.find((it) => {
-        const idx = itemIndexBySku.get(it.sku)
-        return idx !== undefined && lastIndex !== undefined && idx > lastIndex
-      })
-      targetSku = nextItem?.sku || evaluarItems[0].sku
+    const sameSkuIndex = evaluateQueue.findIndex((it) => it.sku === lastActionSku)
+    if (sameSkuIndex === -1) {
+      targetSku = evaluateQueue[0].sku
     }
 
     const node = cardRefs.current.get(targetSku)
     if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' })
     setLastActionSku('')
-  }, [activeTab, evaluarItems, itemIndexBySku, lastActionSku])
+  }, [activeTab, evaluateQueue, lastActionSku])
+
+  function scrollToSku(targetSku) {
+    const node = cardRefs.current.get(targetSku)
+    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function resolveCurrentSku() {
+    if (currentSku && evaluateQueue.some((it) => it.sku === currentSku)) {
+      return currentSku
+    }
+    return evaluateQueue[0]?.sku || ''
+  }
+
+  function onNextEvaluar() {
+    if (!evaluateQueue.length) {
+      setEvaluarNotice('No hay pendientes para evaluar.')
+      return
+    }
+    const skuToUse = resolveCurrentSku()
+    const currentIndex = evaluateQueue.findIndex((it) => it.sku === skuToUse)
+    const nextItem = evaluateQueue[currentIndex + 1] || null
+    if (!nextItem) {
+      setEvaluarNotice('No hay más pendientes para evaluar.')
+      return
+    }
+    setCurrentSku(nextItem.sku)
+    setEvaluarNotice('')
+    scrollToSku(nextItem.sku)
+  }
+
+  function onPostponeEvaluar() {
+    if (!evaluateQueue.length) {
+      setEvaluarNotice('No hay pendientes para evaluar.')
+      return
+    }
+    const skuToUse = resolveCurrentSku()
+    if (!skuToUse) return
+    setEvaluarOrder((prev) => {
+      const without = prev.filter((sku) => sku !== skuToUse)
+      return [...without, skuToUse]
+    })
+    const currentIndex = evaluateQueue.findIndex((it) => it.sku === skuToUse)
+    const nextItem = evaluateQueue[currentIndex + 1] || evaluateQueue[0]
+    if (nextItem?.sku === skuToUse) {
+      setEvaluarNotice('No hay más pendientes para evaluar.')
+      return
+    }
+    setCurrentSku(nextItem?.sku || '')
+    setEvaluarNotice('')
+    if (nextItem?.sku) scrollToSku(nextItem.sku)
+  }
+
+  function isMissingItemValid(item) {
+    return (
+      hasValidCode(dic?.categorias, item?.categoria_cod) &&
+      hasValidCode(dic?.tipos, item?.tipo_cod) &&
+      hasValidCode(dic?.clasif, item?.clasif_cod)
+    )
+  }
+
+  function getEffectiveValue(item, field) {
+    const overrides = unknownEdits[item.sku] || {}
+    if (overrides[field]) return overrides[field]
+    return resolveAttributeValue(item, field)
+  }
+
+  function getChangeCountForItem(item) {
+    if (!item?.maestro) return 3
+    const fields = ['categoria_cod', 'tipo_cod', 'clasif_cod']
+    return fields.reduce((acc, field) => {
+      const original = field === 'categoria_cod'
+        ? item?.maestro?.categoria_cod
+        : field === 'tipo_cod'
+          ? item?.maestro?.tipo_cod
+          : item?.maestro?.clasif_cod
+      const nextValue = getEffectiveValue(item, field)
+      return acc + (String(nextValue || '') !== String(original || '') ? 1 : 0)
+    }, 0)
+  }
+
+  function isUnknownReady(sku) {
+    const edits = unknownEdits[sku] || {}
+    return (
+      hasValidCode(dic?.categorias, edits.categoria_cod) &&
+      hasValidCode(dic?.tipos, edits.tipo_cod) &&
+      hasValidCode(dic?.clasif, edits.clasif_cod)
+    )
+  }
+
+  function onUpdateUnknown(sku, field, value) {
+    setUnknownEdits((prev) => ({
+      ...prev,
+      [sku]: {
+        ...(prev[sku] || {}),
+        [field]: value
+      }
+    }))
+  }
+
+  function onMarkReady(item) {
+    if (!item?.sku) return
+    setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
+    setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
+  }
+
+  function onMoveUnknownToConfirm(item) {
+    if (!item?.sku) return
+    if (!isUnknownReady(item.sku)) return
+    setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
+    setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
+  }
+
+  function onToggleConfirmFlag(sku, value) {
+    setConfirmFlags((prev) => ({ ...prev, [sku]: value }))
+  }
+
+  function onApplyConfirmation() {
+    setStageBySku((prev) => {
+      const next = { ...prev }
+      confirmQueue.forEach((item) => {
+        const shouldConfirm = confirmFlags[item.sku] !== false
+        next[item.sku] = shouldConfirm ? 'consolidate' : 'evaluate'
+      })
+      return next
+    })
+    setActiveTab('consolidate')
+    loadConsolidacion()
+  }
+
+  function buildSummary() {
+    const statsByUser = {}
+    const items = consolidateQueue.map((item) => {
+      const fields = ['categoria_cod', 'tipo_cod', 'clasif_cod']
+      const changes = fields.map((field) => {
+        const original = field === 'categoria_cod'
+          ? item?.maestro?.categoria_cod
+          : field === 'tipo_cod'
+            ? item?.maestro?.tipo_cod
+            : item?.maestro?.clasif_cod
+        const nextValue = getEffectiveValue(item, field)
+        return {
+          field,
+          oldValue: original || '',
+          newValue: nextValue || ''
+        }
+      })
+      item?.propuestas?.forEach((p) => {
+        ;(p.usuarios || []).forEach((u) => {
+          statsByUser[u] = (statsByUser[u] || 0) + 1
+        })
+      })
+      return { sku: item.sku, changes }
+    })
+    const totalSkus = consolidateQueue.length
+    const updatedSkus = consolidateQueue.filter((item) => getChangeCountForItem(item) > 0).length
+    const verifiedSkus = consolidateQueue.filter((item) => getChangeCountForItem(item) === 0).length
+    return {
+      totalSkus,
+      updatedSkus,
+      verifiedSkus,
+      statsByUser,
+      items
+    }
+  }
+
+  function exportSummaryFiles(summary) {
+    const header = [
+      `Campaña: ${campaniaId || '—'}`,
+      `Total SKUs: ${summary.totalSkus}`,
+      `Actualizados: ${summary.updatedSkus}`,
+      `Verificados: ${summary.verifiedSkus}`
+    ]
+    const statsLines = Object.entries(summary.statsByUser).map(([email, count]) => `${email}\t${count}`)
+    const skuLines = summary.items.flatMap((item) =>
+      item.changes.map((change) => `${item.sku}\t${change.field}\t${change.oldValue}\t${change.newValue}`)
+    )
+    const txtBody = [
+      'RESUMEN',
+      ...header,
+      '',
+      'ESTADISTICAS POR USUARIO',
+      ...statsLines,
+      '',
+      'SKU / CAMBIOS',
+      ...skuLines
+    ].join('\n')
+    const txtBlob = new Blob([`\ufeff${txtBody}`], { type: 'text/plain;charset=utf-8' })
+    descargarBlobDirecto(txtBlob, `campania_${campaniaId}_resumen.txt`)
+
+    const csvLines = [
+      ['section', 'key', 'value'].join(','),
+      ...header.map((line) => ['summary', ...line.split(': ').map((v) => `"${v}"`)].join(',')),
+      '',
+      ['section', 'email', 'count'].join(','),
+      ...Object.entries(summary.statsByUser).map(([email, count]) => `stats,${email},${count}`),
+      '',
+      ['section', 'sku', 'field', 'old_value', 'new_value'].join(','),
+      ...summary.items.flatMap((item) =>
+        item.changes.map((change) =>
+          `changes,${item.sku},${change.field},${change.oldValue},${change.newValue}`
+        )
+      )
+    ].join('\n')
+    const csvBlob = new Blob([`\ufeff${csvLines}`], { type: 'text/csv;charset=utf-8' })
+    descargarBlobDirecto(csvBlob, `campania_${campaniaId}_resumen.csv`)
+  }
+
+  async function onCloseCampaign() {
+    try {
+      const response = await cerrarCampania(Number(campaniaId))
+      if (response?.summary) {
+        setCloseSummary(response.summary)
+      } else {
+        setCloseSummary(null)
+        setToast({
+          show: true,
+          variant: 'warning',
+          message: 'La campaña se cerró, pero no se recibió el resumen.'
+        })
+      }
+
+      const exports = response?.exports || {}
+      setExportLoading(true)
+      try {
+        await descargarTxtPorScope('applied', exports.applied || null)
+        await descargarTxtPorScope('unknown', exports.unknown || null)
+        if (exports.summaryTxt) {
+          await descargarBlobDesdeUrl(exports.summaryTxt, `summary_campania_${campaniaId}.txt`)
+        } else {
+          const summaryBlob = await exportSummaryTxt(Number(campaniaId))
+          descargarBlobDirecto(summaryBlob, `summary_campania_${campaniaId}.txt`)
+        }
+      } finally {
+        setExportLoading(false)
+      }
+
+      loadConsolidacion()
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo cerrar la campaña.'
+      })
+    }
+  }
 
   // ===== Acciones tarjetas =====
-  async function onAceptar(sku, prop) {
-    await decidirRevision({
-      campaniaId: Number(campaniaId), sku,
-      propuesta: prop, decision: 'aceptar',
-      decidedBy: 'admin@local', aplicarAhora: false
-    })
-    await cargar()
-    setLastActionSku(sku)
-  }
   async function onDecideAttribute(sku, field, code, decision) {
     const propuesta = { [field]: code }
-    await decidirRevision({
-      campaniaId: Number(campaniaId),
-      sku,
-      propuesta,
-      decision,
-      decidedBy: 'admin@local',
-      aplicarAhora: false
-    })
-    await cargar()
-    setLastActionSku(sku)
+    try {
+      await decidirRevision({
+        campaniaId: Number(campaniaId),
+        sku,
+        propuesta,
+        decision,
+        decidedBy: 'admin@local',
+        aplicarAhora: false
+      })
+      await cargar()
+      setLastActionSku(sku)
+      setCurrentSku(sku)
+      setToast({
+        show: true,
+        variant: 'success',
+        message: `Decisión ${decision === 'aceptar' ? 'aceptada' : 'rechazada'} para ${sku}.`
+      })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo guardar la decisión.'
+      })
+    }
   }
   async function onRechazar(sku, prop) {
-    await decidirRevision({
-      campaniaId: Number(campaniaId), sku,
-      propuesta: prop, decision: 'rechazar',
-      decidedBy: 'admin@local'
-    })
-    await cargar()
-    setLastActionSku(sku)
+    try {
+      await decidirRevision({
+        campaniaId: Number(campaniaId), sku,
+        propuesta: prop, decision: 'rechazar',
+        decidedBy: 'admin@local'
+      })
+      await cargar()
+      setLastActionSku(sku)
+      setCurrentSku(sku)
+      setToast({
+        show: true,
+        variant: 'success',
+        message: `Propuesta rechazada para ${sku}.`
+      })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo rechazar la propuesta.'
+      })
+    }
+  }
+  async function onUndoAttributeDecision(decisionId, sku) {
+    if (!decisionId) return
+    try {
+      await undoActualizacion(decisionId)
+      if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
+      setUiMessage({
+        variant: 'info',
+        text: 'Decisión deshecha. Quedó como pendiente nuevamente.'
+      })
+      messageTimeoutRef.current = setTimeout(() => {
+        setUiMessage(null)
+        messageTimeoutRef.current = null
+      }, 4000)
+      await cargar()
+      if (sku) setLastActionSku(sku)
+      setCurrentSku(sku)
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo deshacer la decisión.'
+      })
+    }
+  }
+
+  function mapMissingItem(item) {
+    return {
+      sku: String(item?.sku || '').trim().toUpperCase(),
+      categoria_cod: pad2(item?.categoria_cod),
+      tipo_cod: pad2(item?.tipo_cod),
+      clasif_cod: pad2(item?.clasif_cod),
+    }
+  }
+
+  async function onAddMissingItems(itemsToAdd) {
+    const payload = (itemsToAdd || [])
+      .filter(isMissingItemValid)
+      .map(mapMissingItem)
+      .filter((item) => item.sku)
+    if (!payload.length) {
+      setToast({
+        show: true,
+        variant: 'warning',
+        message: 'No hay artículos válidos para agregar al maestro.'
+      })
+      return
+    }
+    try {
+      await importarMaestroJSON(payload)
+      setToast({
+        show: true,
+        variant: 'success',
+        message: `Se agregaron ${payload.length} artículos al maestro.`
+      })
+      await loadMissingItems()
+      await cargar()
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudieron agregar los artículos al maestro.'
+      })
+    }
   }
 
   // ===== Acciones cola (masivas) =====
@@ -294,6 +832,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     }, 4000)
     await cargar()
     if (item?.sku) setLastActionSku(item.sku)
+    if (item?.sku) setCurrentSku(item.sku)
     setActiveTab('revisiones')
   }
   async function onRevertRow(id) {
@@ -321,39 +860,101 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     setLastExportKind('CSV')
     setShowArchiveModal(true)
   }
-  async function onExportTxtCat(estado='aceptadas', incluirArchivadas=false) {
-    const b = await exportTxtCategoria(Number(campaniaId), estado, incluirArchivadas)
-    descargarBlobDirecto(b, `categoria_${campaniaId}_${estado}${incluirArchivadas?'_inclArch':''}.txt`)
-    setLastExportKind('TXT Categoría')
-    setShowArchiveModal(true)
-  }
-  async function onExportTxtTipo(estado='aceptadas', incluirArchivadas=false) {
-    const b = await exportTxtTipo(Number(campaniaId), estado, incluirArchivadas)
-    descargarBlobDirecto(b, `tipo_${campaniaId}_${estado}${incluirArchivadas?'_inclArch':''}.txt`)
-    setLastExportKind('TXT Tipo')
-    setShowArchiveModal(true)
-  }
-  async function onExportTxtClasif(estado='aceptadas', incluirArchivadas=false) {
-    const b = await exportTxtClasif(Number(campaniaId), estado, incluirArchivadas)
-    descargarBlobDirecto(b, `clasif_${campaniaId}_${estado}${incluirArchivadas?'_inclArch':''}.txt`)
-    setLastExportKind('TXT Clasif')
-    setShowArchiveModal(true)
-  }
-  function onExportTxtSeleccion(campo) {
-    const mapNew = { categoria: 'new_categoria_cod', tipo: 'new_tipo_cod', clasif: 'new_clasif_cod' }
-    const mapOld = { categoria: 'old_categoria_cod', tipo: 'old_tipo_cod', clasif: 'old_clasif_cod' }
-    const chosen = cola.filter(a => seleccion.includes(a.id))
-    const lines = []
-    for (const a of chosen) {
-      const newCode = a[mapNew[campo]]
-      const oldCode = a[mapOld[campo]]
-      if (!newCode) continue
-      if (oldCode && String(oldCode) === String(newCode)) continue
-      lines.push(`${a.sku}\t${newCode}`)
+  async function descargarTxtPorScope(scope, urls = null) {
+    const id = Number(campaniaId)
+    const suffix = scope || 'applied'
+    const failures = []
+    const recordFailure = (label, error) => {
+      const reason = error?.message || label
+      failures.push(reason)
     }
-    const body = '\ufeff' + lines.join('\n') + (lines.length ? '\n' : '')
-    const blob = new Blob([body], { type: 'text/plain;charset=utf-8' })
-    descargarBlobDirecto(blob, `${campo}_seleccion_camp_${campaniaId}.txt`)
+    if (urls) {
+      if (!urls.categoria) {
+        recordFailure('categoría')
+      } else {
+        await descargarBlobDesdeUrl(urls.categoria, `categoria_${id}_${suffix}.txt`).catch((e) => {
+          recordFailure('categoría', e)
+        })
+      }
+      if (!urls.tipo) {
+        recordFailure('tipo')
+      } else {
+        await descargarBlobDesdeUrl(urls.tipo, `tipo_${id}_${suffix}.txt`).catch((e) => {
+          recordFailure('tipo', e)
+        })
+      }
+      if (!urls.clasif) {
+        recordFailure('clasif')
+      } else {
+        await descargarBlobDesdeUrl(urls.clasif, `clasif_${id}_${suffix}.txt`).catch((e) => {
+          recordFailure('clasif', e)
+        })
+      }
+      if (failures.length) {
+        throw new Error(`No se pudieron descargar algunos archivos TXT: ${failures.join(', ')}.`)
+      }
+      return
+    }
+    const catBlob = await exportTxtCategoria(id, scope).catch((e) => {
+      recordFailure('categoría', e)
+      return null
+    })
+    if (catBlob) descargarBlobDirecto(catBlob, `categoria_${id}_${suffix}.txt`)
+    const tipoBlob = await exportTxtTipo(id, scope).catch((e) => {
+      recordFailure('tipo', e)
+      return null
+    })
+    if (tipoBlob) descargarBlobDirecto(tipoBlob, `tipo_${id}_${suffix}.txt`)
+    const clasifBlob = await exportTxtClasif(id, scope).catch((e) => {
+      recordFailure('clasif', e)
+      return null
+    })
+    if (clasifBlob) descargarBlobDirecto(clasifBlob, `clasif_${id}_${suffix}.txt`)
+    if (failures.length) {
+      throw new Error(`No se pudieron descargar algunos archivos TXT: ${failures.join(', ')}.`)
+    }
+  }
+
+  async function onDownloadAppliedTxts() {
+    if (!campaniaId) return
+    try {
+      setExportLoading(true)
+      await descargarTxtPorScope('applied')
+      setToast({
+        show: true,
+        variant: 'success',
+        message: 'TXT de cambios aplicados descargados.'
+      })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudieron descargar los TXT aplicados.'
+      })
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
+  async function onDownloadUnknownTxts() {
+    if (!campaniaId) return
+    try {
+      setExportLoading(true)
+      await descargarTxtPorScope('unknown')
+      setToast({
+        show: true,
+        variant: 'success',
+        message: 'TXT de artículos desconocidos descargados.'
+      })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudieron descargar los TXT de desconocidos.'
+      })
+    } finally {
+      setExportLoading(false)
+    }
   }
 
   // ===== Selección en cola =====
@@ -465,40 +1066,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   // ===== UI =====
   return (
     <>
-      <Card className="mb-3">
-        <Card.Body className="d-flex flex-column flex-lg-row gap-3 align-items-start align-items-lg-center justify-content-between">
-          <div>
-            <div className="fw-semibold">Flujo guiado</div>
-            <div className="text-muted small">
-              Paso 1: evaluá discrepancias, Paso 2: decidí y confirmá, Paso 3: exportá resultados.
-            </div>
-          </div>
-          <ButtonGroup aria-label="Wizard steps">
-            <Button
-              variant={activeTab === 'revisiones' ? 'primary' : 'outline-primary'}
-              onClick={() => setActiveTab('revisiones')}
-            >
-              1. Evaluar
-            </Button>
-            <Button
-              variant={activeTab === 'cola' ? 'primary' : 'outline-primary'}
-              onClick={() => {
-                setActiveTab('cola')
-                setTimeout(() => colaRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
-              }}
-            >
-              2. Decidir
-            </Button>
-            <Button
-              variant={activeTab === 'export' ? 'primary' : 'outline-primary'}
-              onClick={() => setActiveTab('export')}
-            >
-              3. Exportar
-            </Button>
-          </ButtonGroup>
-        </Card.Body>
-      </Card>
-
       <ToastContainer position="bottom-end" className="p-3">
         <Toast
           bg={toast.variant}
@@ -515,6 +1082,15 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           </Toast.Body>
         </Toast>
       </ToastContainer>
+      {uiMessage && (
+        <Alert
+          variant={uiMessage.variant || 'info'}
+          dismissible
+          onClose={() => setUiMessage(null)}
+        >
+          {uiMessage.text}
+        </Alert>
+      )}
 
       {/* Barra superior común */}
       <Card className="mb-3">
@@ -557,38 +1133,67 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       <Tabs activeKey={activeTab} onSelect={k => setActiveTab(k || 'revisiones')} className="mb-3">
         {/* ====== TAB: Revisiones (tarjetas) ====== */}
         <Tab eventKey="revisiones" title="Evaluar">
-          <div className="d-flex justify-content-between align-items-center mb-2">
+          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
             <ButtonGroup>
-              <Button variant={filtroDecision==='pendientes' ? 'primary' : 'outline-primary'}
-                      onClick={()=>setFiltroDecision('pendientes')}>
-                Pendientes ({contadores.pendientes})
+              <Button
+                variant={activeEvalTab === 'pending' ? 'primary' : 'outline-primary'}
+                onClick={() => setActiveEvalTab('pending')}
+              >
+                Pendientes ({evaluateQueue.length})
               </Button>
-              <Button variant={filtroDecision==='aceptadas' ? 'success' : 'outline-success'}
-                      onClick={()=>setFiltroDecision('aceptadas')}>
-                Aceptadas ({contadores.aceptadas})
-              </Button>
-              <Button variant={filtroDecision==='rechazadas' ? 'danger' : 'outline-danger'}
-                      onClick={()=>setFiltroDecision('rechazadas')}>
-                Rechazadas ({contadores.rechazadas})
-              </Button>
-              <Button variant={filtroDecision==='todas' ? 'secondary' : 'outline-secondary'}
-                      onClick={()=>setFiltroDecision('todas')}>
-                Todas
+              <Button
+                variant={activeEvalTab === 'unknown' ? 'warning' : 'outline-warning'}
+                onClick={() => setActiveEvalTab('unknown')}
+              >
+                Desconocidos ({unknownQueue.length})
               </Button>
             </ButtonGroup>
 
-            <Button
-              variant="outline-dark"
-              onClick={()=>{ setActiveTab('cola'); setTimeout(()=>colaRef.current?.scrollIntoView({behavior:'smooth'}), 60) }}
-            >
-              Ir a Paso 2 (Decidir)
-            </Button>
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <Button
+                variant="outline-secondary"
+                onClick={onPostponeEvaluar}
+                disabled={!evaluateQueue.length || activeEvalTab !== 'pending'}
+              >
+                Posponer artículo
+              </Button>
+              <Button
+                variant="outline-primary"
+                onClick={onNextEvaluar}
+                disabled={!evaluateQueue.length || activeEvalTab !== 'pending'}
+              >
+                Siguiente artículo
+              </Button>
+              <Button
+                variant="success"
+                onClick={() => onMarkReady(currentEvaluarItem)}
+                disabled={!currentEvaluarItem || activeEvalTab !== 'pending'}
+              >
+                Listo para confirmar
+              </Button>
+            </div>
           </div>
+          {evaluarNotice && (
+            <Alert variant="info" onClose={() => setEvaluarNotice('')} dismissible>
+              {evaluarNotice}
+            </Alert>
+          )}
+          {activeEvalTab === 'pending' && !evaluateQueue.length && (
+            <Alert variant="warning">
+              No hay pendientes a evaluar. Los SKUs listos pasarán a Confirmación.
+            </Alert>
+          )}
 
-          {/* TARJETAS */}
-          {evaluarItems.map(it => {
+          {activeEvalTab === 'pending' && currentEvaluarItem && (() => {
+            const it = currentEvaluarItem
             const borde = it.hayConsenso ? 'border-success' : 'border-warning'
             const bordeWidth = 'border-start border-4'
+            const acceptedCategoriaCode = getAcceptedAttributeCode(it.propuestas, 'categoria_cod')
+            const acceptedTipoCode = getAcceptedAttributeCode(it.propuestas, 'tipo_cod')
+            const acceptedClasifCode = getAcceptedAttributeCode(it.propuestas, 'clasif_cod')
+            const acceptedCategoriaDecision = getAcceptedAttributeDecision(it.propuestas, 'categoria_cod')
+            const acceptedTipoDecision = getAcceptedAttributeDecision(it.propuestas, 'tipo_cod')
+            const acceptedClasifDecision = getAcceptedAttributeDecision(it.propuestas, 'clasif_cod')
             return (
               <Card
                 key={it.sku}
@@ -600,35 +1205,112 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
               >
                 <Card.Header className="d-flex justify-content-between align-items-center">
                   <div className="d-flex align-items-center gap-3">
-                    <strong>{it.sku}</strong>
+                    <strong className="fs-5">{it.sku}</strong>
                     {it.hayConsenso
-                      ? <Badge bg="success">Consenso {Math.round(it.consensoPct*100)}%</Badge>
+                      ? <Badge bg="success">Consenso {Math.round(it.consensoPct * 100)}%</Badge>
                       : <Badge bg="warning" text="dark">Sin consenso</Badge>}
                   </div>
                   <small className="text-muted">{it.totalVotos} votos</small>
                 </Card.Header>
                 <Card.Body>
-                  <Row>
+                  <Row className="g-3">
                     <Col md={5}>
-                      <h6>Original (snapshot)</h6>
+                      <h6>Original (maestro)</h6>
                       <Table size="sm" bordered>
                         <tbody>
-                          <tr><td>Categoría</td><td>{etiqueta(dic?.categorias, it.maestro?.categoria_cod)}</td></tr>
-                          <tr><td>Tipo</td><td>{etiqueta(dic?.tipos, it.maestro?.tipo_cod)}</td></tr>
-                          <tr><td>Clasificación</td><td>{etiqueta(dic?.clasif, it.maestro?.clasif_cod)}</td></tr>
+                          <tr><td>Categoría</td><td>{etiquetaNombre(dic?.categorias, it.maestro?.categoria_cod)}</td></tr>
+                          <tr><td>Tipo</td><td>{etiquetaNombre(dic?.tipos, it.maestro?.tipo_cod)}</td></tr>
+                          <tr><td>Clasificación</td><td>{etiquetaNombre(dic?.clasif, it.maestro?.clasif_cod)}</td></tr>
+                        </tbody>
+                      </Table>
+                      <h6 className="mt-3">Sugerido aceptado</h6>
+                      <Table size="sm" bordered>
+                        <tbody>
+                          <tr>
+                            <td>Categoría</td>
+                            <td>{acceptedCategoriaCode ? etiquetaNombre(dic?.categorias, acceptedCategoriaCode) : '—'}</td>
+                            <td className="text-end">
+                              {acceptedCategoriaDecision && acceptedCategoriaDecision.estado !== 'aplicada' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  onClick={() => onUndoAttributeDecision(acceptedCategoriaDecision.id, it.sku)}
+                                  disabled={!authOK}
+                                >
+                                  Deshacer
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Tipo</td>
+                            <td>{acceptedTipoCode ? etiquetaNombre(dic?.tipos, acceptedTipoCode) : '—'}</td>
+                            <td className="text-end">
+                              {acceptedTipoDecision && acceptedTipoDecision.estado !== 'aplicada' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  onClick={() => onUndoAttributeDecision(acceptedTipoDecision.id, it.sku)}
+                                  disabled={!authOK}
+                                >
+                                  Deshacer
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Clasificación</td>
+                            <td>{acceptedClasifCode ? etiquetaNombre(dic?.clasif, acceptedClasifCode) : '—'}</td>
+                            <td className="text-end">
+                              {acceptedClasifDecision && acceptedClasifDecision.estado !== 'aplicada' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  onClick={() => onUndoAttributeDecision(acceptedClasifDecision.id, it.sku)}
+                                  disabled={!authOK}
+                                >
+                                  Deshacer
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
                         </tbody>
                       </Table>
                     </Col>
                     <Col md={7}>
-                      <h6 className="mb-3">Propuestas por atributo</h6>
+                      <h6 className="mb-2">Sugerencias por atributo</h6>
                       {(['categoria_cod', 'tipo_cod', 'clasif_cod']).map((field) => {
+                        const maestroCode = field === 'categoria_cod'
+                          ? it.maestro?.categoria_cod
+                          : field === 'tipo_cod'
+                            ? it.maestro?.tipo_cod
+                            : it.maestro?.clasif_cod
                         const acceptedCode = getAcceptedAttributeCode(it.propuestas, field)
                         const meta = buildAttributeOptions(it.propuestas, field)
-                        const visibleOptions = acceptedCode
-                          ? meta.options.filter((opt) => opt.code === acceptedCode)
-                          : meta.options
+                        const filteredOptions = meta.options.filter((opt) => String(opt.code) !== String(maestroCode))
                         const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
-                        if (!visibleOptions.length) return null
+                        const maestroConsensus = meta.options.find((opt) => String(opt.code) === String(maestroCode))
+                        const isVerified = maestroConsensus && maestroConsensus.share === 1
+                        if (!filteredOptions.length && isVerified) {
+                          return (
+                            <Card key={field} className="mb-2 border-0 bg-light">
+                              <Card.Body className="py-2 d-flex align-items-center justify-content-between">
+                                <div className="fw-semibold">{label}</div>
+                                <Badge bg="success">Verificado</Badge>
+                              </Card.Body>
+                            </Card>
+                          )
+                        }
+                        if (!filteredOptions.length) {
+                          return (
+                            <Card key={field} className="mb-2 border-0 bg-light">
+                              <Card.Body className="py-2 d-flex align-items-center justify-content-between">
+                                <div className="fw-semibold">{label}</div>
+                                <Badge bg="secondary">Sin sugerencias</Badge>
+                              </Card.Body>
+                            </Card>
+                          )
+                        }
                         return (
                           <Card key={field} className="mb-3 border-0 shadow-sm">
                             <Card.Body>
@@ -637,22 +1319,33 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                 <div className="text-muted small">{meta.total} votos</div>
                               </div>
                               <div className="mt-2 d-flex flex-column gap-2">
-                                {visibleOptions.map((opt) => {
+                                {filteredOptions.map((opt) => {
                                   const consensus = consensusLabel(opt.share)
                                   const isAccepted = Boolean(acceptedCode && opt.code === acceptedCode)
+                                  const dicKey = field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'
                                   return (
                                     <div key={`${field}-${opt.code}`} className="border rounded p-2">
                                       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
                                         <div>
-                                          <div className="fw-semibold">{etiqueta(dic?.[field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'], opt.code)}</div>
+                                          <div className="fw-semibold">{etiquetaNombre(dic?.[dicKey], opt.code)}</div>
                                           <div className="small text-muted">
                                             {opt.count} votos ·
                                             <Badge bg={consensus.variant} className="ms-2">{consensus.text}</Badge>
-                                            {isAccepted && <Badge bg="success" className="ms-2">Aceptada</Badge>}
+                                            {isAccepted && <Badge bg="success" className="ms-2">Elegida</Badge>}
                                           </div>
                                           <Stack direction="horizontal" gap={2} className="mt-1 flex-wrap">
-                                            {opt.usuarios.map(u => <Badge bg="secondary" key={`${field}-${opt.code}-${u}`}>{u}</Badge>)}
-                                            {opt.sucursales.map(s => <Badge bg="info" key={`${field}-${opt.code}-${s}`}>{s}</Badge>)}
+                                            {opt.usuarios.map((u) => (
+                                              <OverlayTrigger
+                                                key={`${field}-${opt.code}-${u}`}
+                                                placement="top"
+                                                overlay={<Tooltip>{u}</Tooltip>}
+                                              >
+                                                <Badge bg="secondary">{shortUserLabel(u)}</Badge>
+                                              </OverlayTrigger>
+                                            ))}
+                                            {opt.sucursales.map((s) => (
+                                              <Badge bg="info" key={`${field}-${opt.code}-${s}`}>{s}</Badge>
+                                            ))}
                                           </Stack>
                                         </div>
                                         <div className="d-flex align-items-center gap-2">
@@ -660,7 +1353,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                             variant="outline-danger"
                                             size="sm"
                                             onClick={() => onDecideAttribute(it.sku, field, opt.code, 'rechazar')}
-                                            disabled={!authOK || isAccepted}
+                                            disabled={!authOK}
                                           >
                                             Rechazar
                                           </Button>
@@ -668,7 +1361,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                             variant="success"
                                             size="sm"
                                             onClick={() => onDecideAttribute(it.sku, field, opt.code, 'aceptar')}
-                                            disabled={!authOK || isAccepted}
+                                            disabled={!authOK}
                                           >
                                             Aceptar
                                           </Button>
@@ -682,402 +1375,389 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                           </Card>
                         )
                       })}
-                      <h6 className="mt-4">Propuestas completas</h6>
-                      {it.propsFiltradas.map((p, idx) => (
-                        <Card key={idx} className="mb-2">
-                          <Card.Body>
-                            <div className="d-flex justify-content-between align-items-center">
-                              <div>
-                                <div><strong>{p.count}</strong> votos</div>
-                                <div className="small text-muted">
-                                  Cat: {etiqueta(dic?.categorias, p.categoria_cod)} ·
-                                  Tipo: {etiqueta(dic?.tipos, p.tipo_cod)} ·
-                                  Clasif: {etiqueta(dic?.clasif, p.clasif_cod)}
-                                </div>
-                                <Stack direction="horizontal" gap={2} className="mt-1 flex-wrap">
-                                  {p.usuarios.map(u => <Badge bg="secondary" key={u} title="Usuario">{u}</Badge>)}
-                                  {p.sucursales.map(s => <Badge bg="info" key={s} title="Sucursal">{s}</Badge>)}
-                                </Stack>
-                              </div>
-                              <div className="d-flex align-items-center gap-2">
-                                {p.decision ? (
-                                  <>
-                                    {badgeDecision(p.decision.estado)}
-                                    {p.decision.estado !== 'aplicada' && (
-                                      <Button size="sm" variant="outline-secondary"
-                                              onClick={()=>onUndoRow({ id: p.decision.id, sku: it.sku })} disabled={!authOK}>
-                                        Deshacer
-                                      </Button>
-                                    )}
-                                  </>
-                                ) : (
-                                  <>
-                                    <Button variant="outline-danger" size="sm"
-                                            onClick={()=>onRechazar(it.sku, p)} disabled={!authOK}>
-                                      Rechazar
-                                    </Button>
-                                    <Button variant="success" size="sm"
-                                            onClick={()=>onAceptar(it.sku, p)} disabled={!authOK}>
-                                      Aceptar
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            {p.decision && (
-                              <div className="mt-2">
-                                <small className="text-muted">
-                                  {p.decision.decidedBy || ''} · {p.decision.decidedAt ? new Date(p.decision.decidedAt).toLocaleString() : ''}
-                                </small>
-                              </div>
-                            )}
-                          </Card.Body>
-                        </Card>
-                      ))}
+
+                      <Accordion className="mt-3">
+                        <Accordion.Item eventKey="0">
+                          <Accordion.Header>Detalle de propuestas (opcional)</Accordion.Header>
+                          <Accordion.Body>
+                            {it.propsFiltradas.map((p, idx) => (
+                              <Card key={idx} className="mb-2">
+                                <Card.Body>
+                                  <div className="d-flex justify-content-between align-items-center">
+                                    <div>
+                                      <div><strong>{p.count}</strong> votos</div>
+                                      <div className="small text-muted">
+                                        Cat: {etiquetaNombre(dic?.categorias, p.categoria_cod)} ·
+                                        Tipo: {etiquetaNombre(dic?.tipos, p.tipo_cod)} ·
+                                        Clasif: {etiquetaNombre(dic?.clasif, p.clasif_cod)}
+                                      </div>
+                                      <Stack direction="horizontal" gap={2} className="mt-1 flex-wrap">
+                                        {p.usuarios.map((u) => (
+                                          <OverlayTrigger key={u} placement="top" overlay={<Tooltip>{u}</Tooltip>}>
+                                            <Badge bg="secondary">{shortUserLabel(u)}</Badge>
+                                          </OverlayTrigger>
+                                        ))}
+                                        {p.sucursales.map((s) => <Badge bg="info" key={s} title="Sucursal">{s}</Badge>)}
+                                      </Stack>
+                                    </div>
+                                    <div className="d-flex align-items-center gap-2">
+                                      {p.decision ? (
+                                        <>
+                                          {badgeDecision(p.decision.estado)}
+                                          {p.decision.estado !== 'aplicada' && (
+                                            <Button size="sm" variant="outline-secondary"
+                                                    onClick={()=>onUndoRow({ id: p.decision.id, sku: it.sku })} disabled={!authOK}>
+                                              Deshacer
+                                            </Button>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <Button variant="outline-danger" size="sm"
+                                                onClick={()=>onRechazar(it.sku, p)} disabled={!authOK}>
+                                          Rechazar
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </Card.Body>
+                              </Card>
+                            ))}
+                          </Accordion.Body>
+                        </Accordion.Item>
+                      </Accordion>
                     </Col>
                   </Row>
                 </Card.Body>
               </Card>
             )
-          })}
-          {!items.length && (
+          })()}
+          {activeEvalTab === 'pending' && !currentEvaluarItem && (
             <Card body className="text-center text-muted">No hay resultados con los filtros actuales.</Card>
+          )}
+
+          {activeEvalTab === 'unknown' && (
+            <Card>
+              <Card.Header className="d-flex justify-content-between align-items-center">
+                <strong>SKUs desconocidos</strong>
+                <small className="text-muted">Completá las 3 características para enviarlos a Confirmación.</small>
+              </Card.Header>
+              <Card.Body>
+                <Table responsive bordered size="sm">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Categoría</th>
+                      <th>Tipo</th>
+                      <th>Clasificación</th>
+                      <th>Estado</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unknownQueue.map((item) => {
+                      const edits = unknownEdits[item.sku] || {}
+                      const ready = isUnknownReady(item.sku)
+                      const categoriaLabel = buildAttributeOptions(item?.propuestas, 'categoria_cod').options[0]
+                      const tipoLabel = buildAttributeOptions(item?.propuestas, 'tipo_cod').options[0]
+                      const clasifLabel = buildAttributeOptions(item?.propuestas, 'clasif_cod').options[0]
+                      return (
+                        <tr key={item.sku}>
+                          <td>{item.sku}</td>
+                          <td>
+                            <Form.Select
+                              size="sm"
+                              value={edits.categoria_cod || ''}
+                              onChange={(e) => onUpdateUnknown(item.sku, 'categoria_cod', e.target.value)}
+                            >
+                              <option value="">Seleccionar</option>
+                              {(dic?.categorias || []).map((c) => (
+                                <option key={c.cod} value={c.cod}>{c.nombre}</option>
+                              ))}
+                            </Form.Select>
+                            {categoriaLabel?.code && (
+                              <div className="small text-muted mt-1">
+                                Sugerido: {etiquetaNombre(dic?.categorias, categoriaLabel.code)}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <Form.Select
+                              size="sm"
+                              value={edits.tipo_cod || ''}
+                              onChange={(e) => onUpdateUnknown(item.sku, 'tipo_cod', e.target.value)}
+                            >
+                              <option value="">Seleccionar</option>
+                              {(dic?.tipos || []).map((t) => (
+                                <option key={t.cod} value={t.cod}>{t.nombre}</option>
+                              ))}
+                            </Form.Select>
+                            {tipoLabel?.code && (
+                              <div className="small text-muted mt-1">
+                                Sugerido: {etiquetaNombre(dic?.tipos, tipoLabel.code)}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <Form.Select
+                              size="sm"
+                              value={edits.clasif_cod || ''}
+                              onChange={(e) => onUpdateUnknown(item.sku, 'clasif_cod', e.target.value)}
+                            >
+                              <option value="">Seleccionar</option>
+                              {(dic?.clasif || []).map((c) => (
+                                <option key={c.cod} value={c.cod}>{c.nombre}</option>
+                              ))}
+                            </Form.Select>
+                            {clasifLabel?.code && (
+                              <div className="small text-muted mt-1">
+                                Sugerido: {etiquetaNombre(dic?.clasif, clasifLabel.code)}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            {ready ? <Badge bg="success">Listo</Badge> : <Badge bg="secondary">Incompleto</Badge>}
+                          </td>
+                          <td className="text-end">
+                            <Button
+                              size="sm"
+                              variant="success"
+                              onClick={() => onMoveUnknownToConfirm(item)}
+                              disabled={!ready}
+                            >
+                              Enviar a Confirmación
+                            </Button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {!unknownQueue.length && (
+                      <tr>
+                        <td colSpan={6} className="text-center text-muted">
+                          No hay SKUs desconocidos.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              </Card.Body>
+            </Card>
           )}
         </Tab>
 
-        {/* ====== TAB: Cola ====== */}
-        <Tab eventKey="cola" title="Decidir">
-          <div ref={colaRef} />
+        <Tab eventKey="confirm" title="Confirmación">
           <Card>
-            <Card.Header className="d-flex flex-wrap gap-2 justify-content-between align-items-center">
-              <div className="d-flex gap-2 align-items-center flex-wrap">
-                <strong>Decisiones pendientes y aplicadas</strong>
-
-                <Form.Select
-                  size="sm" value={colaEstado} onChange={e=>setColaEstado(e.target.value)}
-                  title="Estado" style={{minWidth: 160}}
-                >
-                  <option value="">Estado: Todos</option>
-                  <option value="pendiente">Pendiente</option>
-                  <option value="aplicada">Aplicada</option>
-                  <option value="rechazada">Rechazada</option>
-                </Form.Select>
-
-                <Form.Select
-                  size="sm" value={colaArchivada} onChange={e=>setColaArchivada(e.target.value)}
-                  title="Archivadas" style={{minWidth: 160}}
-                >
-                  <option value="activas">Activas</option>
-                  <option value="archivadas">Archivadas</option>
-                  <option value="todas">Todas</option>
-                </Form.Select>
-
-                <small className="text-muted">
-                  Mostrando {colaFiltrada.length} de {cola.length}
-                </small>
+            <Card.Header className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <div>
+                <strong>Confirmación de cambios</strong>
+                <div className="text-muted small">
+                  Ordenados por cantidad de cambios. Podés devolver a Evaluar si hace falta.
+                </div>
               </div>
-
-              <div className="d-flex align-items-center gap-2 flex-wrap">
-                <Dropdown as={ButtonGroup}>
-                  <Button variant="primary" disabled={!authOK || !seleccion.length} onClick={onAplicarSeleccion}>
-                    Confirmar y aplicar seleccionadas (impacta maestro)
-                  </Button>
-                  <Button
-                    variant="outline-primary"
-                    onClick={() => setActiveTab('export')}
-                  >
-                    Ir a Paso 3
-                  </Button>
-                  <Dropdown.Toggle split variant="outline-secondary" />
-                  <Dropdown.Menu align="end">
-                    <Dropdown.Header>Acciones masivas</Dropdown.Header>
-                    <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={onArchivarSeleccion}>Archivar seleccionadas</Dropdown.Item>
-                    <Dropdown.Item disabled={!authOK || !seleccion.length} onClick={onDesarchivarSeleccion}>Desarchivar seleccionadas</Dropdown.Item>
-                  </Dropdown.Menu>
-                </Dropdown>
-                <small className="text-muted">Exportaciones en Paso 3</small>
-              </div>
+              <Button variant="primary" onClick={onApplyConfirmation} disabled={confirmLoading}>
+                Ir a Consolidación
+              </Button>
             </Card.Header>
-
-            <Card.Body className="pt-0">
-              {uiMessage && (
-                <Alert variant={uiMessage.variant} className="mt-3">
-                  {uiMessage.text}
-                </Alert>
-              )}
-              <Card className="border-0 shadow-sm mb-3">
-                <Card.Body className="row g-2">
-                  <div className="col-md-2">
-                    <Button size="sm" variant="outline-secondary" onClick={limpiarFiltrosCola} className="w-100">
-                      Limpiar filtros
-                    </Button>
-                  </div>
-                  <div className="col-md-2">
-                    <Form.Select size="sm" value={fEstado} onChange={e=>setFEstado(e.target.value)}>
-                      <option value="">Estado</option>
-                      <option value="pendiente">Pendiente</option>
-                      <option value="aplicada">Aplicada</option>
-                      <option value="rechazada">Rechazada</option>
-                    </Form.Select>
-                  </div>
-                  <div className="col-md-2"><Form.Control size="sm" value={fSKU} onChange={e=>setFSKU(e.target.value)} placeholder="SKU" /></div>
-                  <div className="col-md-2"><Form.Control size="sm" value={fOldCat} onChange={e=>setFOldCat(e.target.value)} placeholder="Old cat" /></div>
-                  <div className="col-md-2"><Form.Control size="sm" value={fNewCat} onChange={e=>setFNewCat(e.target.value)} placeholder="New cat" /></div>
-                  <div className="col-md-2"><Form.Control size="sm" value={fDecideBy} onChange={e=>setFDecideBy(e.target.value)} placeholder="Decidido por" /></div>
-                  <div className="col-md-2"><Form.Control size="sm" value={fOldTipo} onChange={e=>setFOldTipo(e.target.value)} placeholder="Old tipo" /></div>
-                  <div className="col-md-2"><Form.Control size="sm" value={fNewTipo} onChange={e=>setFNewTipo(e.target.value)} placeholder="New tipo" /></div>
-                  <div className="col-md-2"><Form.Control size="sm" value={fOldCla} onChange={e=>setFOldCla(e.target.value)} placeholder="Old clasif" /></div>
-                  <div className="col-md-2"><Form.Control size="sm" value={fNewCla} onChange={e=>setFNewCla(e.target.value)} placeholder="New clasif" /></div>
-                </Card.Body>
-              </Card>
-
-              <div className="d-flex align-items-center gap-2 mb-2">
-                <Form.Check
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  onChange={toggleSelAllVisible}
-                  label="Seleccionar visibles"
-                />
-                <small className="text-muted">Total seleccionadas: {seleccion.length}</small>
-              </div>
-
-              <Row className="g-3">
-                {colaFiltrada.map(a => {
-                  const statusVariant =
-                    a.estado === 'aplicada' ? 'success' :
-                    a.estado === 'pendiente' ? 'warning' :
-                    a.estado === 'rechazada' ? 'danger' : 'secondary'
-                  const cardClass = a.archivada ? 'border-secondary' : `border-${statusVariant}`
-                  return (
-                    <Col md={6} lg={4} key={a.id}>
-                      <Card className={`h-100 ${cardClass}`}>
-                        <Card.Body>
-                          <div className="d-flex align-items-start justify-content-between">
-                            <div>
-                              <div className="fw-semibold">{a.sku}</div>
-                              <div className="d-flex align-items-center gap-2 mt-1">
-                                {badgeDecision(a.estado)}
-                                {a.archivada && <Badge bg="secondary">Archivada</Badge>}
-                              </div>
-                            </div>
-                            <Form.Check
-                              type="checkbox"
-                              checked={seleccion.includes(a.id)}
-                              onChange={()=>toggleSel(a.id)}
-                              aria-label={`Seleccionar ${a.sku}`}
-                            />
-                          </div>
-
-                          <div className="mt-3">
-                            <div className="text-muted small">Categoría</div>
-                            <div className="d-flex justify-content-between">
-                              <span className="text-muted">{etiqueta(dic?.categorias, a.old_categoria_cod)}</span>
-                              <span className="fw-semibold">{etiqueta(dic?.categorias, a.new_categoria_cod)}</span>
-                            </div>
-                          </div>
-                          <div className="mt-2">
-                            <div className="text-muted small">Tipo</div>
-                            <div className="d-flex justify-content-between">
-                              <span className="text-muted">{etiqueta(dic?.tipos, a.old_tipo_cod)}</span>
-                              <span className="fw-semibold">{etiqueta(dic?.tipos, a.new_tipo_cod)}</span>
-                            </div>
-                          </div>
-                          <div className="mt-2">
-                            <div className="text-muted small">Clasificación</div>
-                            <div className="d-flex justify-content-between">
-                              <span className="text-muted">{etiqueta(dic?.clasif, a.old_clasif_cod)}</span>
-                              <span className="fw-semibold">{etiqueta(dic?.clasif, a.new_clasif_cod)}</span>
-                            </div>
-                          </div>
-
-                          <div className="mt-3 small text-muted">
-                            <div>Decidido por: <span className="fw-semibold text-dark">{a.decidedBy || '—'}</span></div>
-                            <div>Decidido en: {a.decidedAt ? new Date(a.decidedAt).toLocaleString() : '—'}</div>
-                          </div>
-
-                          <div className="mt-3 d-flex flex-wrap gap-2">
-                            {a.estado !== 'aplicada' ? (
-                              <Button size="sm" variant="outline-secondary"
-                                      onClick={()=>onUndoRow(a)} disabled={!authOK}>
-                                Deshacer
-                              </Button>
+            <Card.Body>
+              {confirmError && <Alert variant="danger">{confirmError}</Alert>}
+              {confirmLoading ? (
+                <div className="text-center text-muted">Cargando confirmaciones...</div>
+              ) : (
+                <Table responsive bordered size="sm">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Cambios</th>
+                      <th>Verificados</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {confirmItems
+                      .slice()
+                      .sort((a, b) => Object.keys(b?.changes || {}).length - Object.keys(a?.changes || {}).length)
+                      .map((item) => {
+                      const changesEntries = Object.entries(item?.changes || {})
+                      const verifiedEntries = Object.entries(item?.verified || {})
+                      return (
+                        <tr key={item.sku}>
+                          <td>{item.sku}</td>
+                          <td>
+                            {changesEntries.length ? (
+                              changesEntries.map(([field, value]) => {
+                                const dicKey = field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'
+                                const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
+                                return (
+                                  <Badge bg="light" text="dark" className="me-2" key={field}>
+                                    {label}: {etiquetaNombre(dic?.[dicKey], value)}
+                                  </Badge>
+                                )
+                              })
                             ) : (
-                              <Button size="sm" variant="outline-primary"
-                                      onClick={()=>onRevertRow(a.id)} disabled={!authOK}>
-                                Crear reversión
-                              </Button>
+                              <Badge bg="secondary">Sin cambios</Badge>
                             )}
-                            <Button size="sm"
-                                    variant={a.archivada ? 'outline-dark' : 'outline-secondary'}
-                                    onClick={()=>onToggleArchiveRow(a)} disabled={!authOK}>
-                              {a.archivada ? 'Desarchivar' : 'Archivar'}
-                            </Button>
-                          </div>
-                        </Card.Body>
-                      </Card>
-                    </Col>
-                  )
-                })}
-                {!colaFiltrada.length && (
-                  <Col>
-                    <Card body className="text-center text-muted">Sin resultados</Card>
-                  </Col>
-                )}
-              </Row>
+                          </td>
+                          <td>
+                            {verifiedEntries.length ? (
+                              verifiedEntries.map(([field, value]) => {
+                                const dicKey = field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'
+                                const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
+                                return (
+                                  <Badge bg="info" className="me-2" key={field}>
+                                    {label}: {etiquetaNombre(dic?.[dicKey], value)}
+                                  </Badge>
+                                )
+                              })
+                            ) : (
+                              <Badge bg="secondary">Sin verificados</Badge>
+                            )}
+                          </td>
+                          <td>
+                            {item?.decision?.estado ? (
+                              <>
+                                {badgeDecision(item.decision.estado)}
+                                {item?.decision?.decidedBy && (
+                                  <div className="text-muted small">{item.decision.decidedBy}</div>
+                                )}
+                              </>
+                            ) : (
+                              <Badge bg="secondary">Pendiente</Badge>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {!confirmItems.length && (
+                      <tr>
+                        <td colSpan={4} className="text-center text-muted">
+                          No hay SKUs en confirmación.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              )}
             </Card.Body>
           </Card>
         </Tab>
-        <Tab eventKey="export" title="Exportar">
+        <Tab eventKey="consolidate" title="Consolidación">
           <Card>
-            <Card.Header className="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+            <Card.Header className="d-flex flex-wrap justify-content-between align-items-center gap-2">
               <div>
-                <strong>Exportación de decisiones</strong>
+                <strong>Consolidación</strong>
                 <div className="text-muted small">
-                  Exportá las decisiones aceptadas para actualizar tu sistema de gestión.
+                  Exportá TXT por cambios aplicados o desconocidos y cerrá la campaña cuando esté lista.
                 </div>
               </div>
-              <div className="d-flex gap-2 align-items-center">
-                <Badge bg="light" text="dark">Campaña #{campaniaId || '—'}</Badge>
+              <div className="d-flex flex-wrap gap-2">
                 <Button
-                  variant="outline-secondary"
-                  onClick={() => setActiveTab('cola')}
+                  variant="outline-primary"
+                  onClick={onDownloadAppliedTxts}
+                  disabled={exportLoading || consolidateLoading}
                 >
-                  Volver a Paso 2
+                  Descargar aplicados (3 TXT)
+                </Button>
+                <Button
+                  variant="outline-warning"
+                  onClick={onDownloadUnknownTxts}
+                  disabled={exportLoading || consolidateLoading}
+                >
+                  Descargar desconocidos (3 TXT)
+                </Button>
+                <Button variant="success" onClick={onCloseCampaign} disabled={consolidateLoading || exportLoading}>
+                  Cerrar campaña
                 </Button>
               </div>
             </Card.Header>
             <Card.Body>
-              <Row className="g-3">
-                <Col md={4}>
-                  <Card className="h-100">
-                    <Card.Body>
-                      <h6>Exportación CSV</h6>
-                      <p className="text-muted small">
-                        Descarga el detalle completo de actualizaciones de la campaña (incluye estados).
-                      </p>
-                      <Button variant="primary" disabled={!authOK} onClick={onExportCola}>
-                        Exportar CSV de actualizaciones
-                      </Button>
-                    </Card.Body>
-                  </Card>
-                </Col>
-                <Col md={4}>
-                  <Card className="h-100">
-                    <Card.Body>
-                      <h6>Exportación TXT (aceptadas)</h6>
-                      <p className="text-muted small">
-                        Exporta sólo los cambios aceptados para cada atributo. Activá “Incluir archivadas” si querés sumar el historial.
-                      </p>
-                      <Form.Check
-                        type="switch"
-                        id="export-include-archived"
-                        label="Incluir archivadas"
-                        checked={exportIncludeArchived}
-                        onChange={e => setExportIncludeArchived(e.target.checked)}
-                        className="mb-2"
-                      />
-                      <div className="d-flex flex-wrap gap-2">
-                        <Button
-                          variant="outline-primary"
-                          disabled={!authOK}
-                          onClick={() => onExportTxtCat('aceptadas', exportIncludeArchived)}
-                        >
-                          TXT Categoría
-                        </Button>
-                        <Button
-                          variant="outline-primary"
-                          disabled={!authOK}
-                          onClick={() => onExportTxtTipo('aceptadas', exportIncludeArchived)}
-                        >
-                          TXT Tipo
-                        </Button>
-                        <Button
-                          variant="outline-primary"
-                          disabled={!authOK}
-                          onClick={() => onExportTxtClasif('aceptadas', exportIncludeArchived)}
-                        >
-                          TXT Clasif
-                        </Button>
-                      </div>
-                    </Card.Body>
-                  </Card>
-                </Col>
-                <Col md={4}>
-                  <Card className="h-100">
-                    <Card.Body>
-                      <h6>Exportación TXT (selección actual)</h6>
-                      <p className="text-muted small">
-                        Exporta sólo los SKUs seleccionados en Decidir (pendientes, aplicados o rechazados).
-                      </p>
-                      <div className="d-flex flex-wrap gap-2">
-                        <Button
-                          variant="outline-secondary"
-                          disabled={!authOK || !seleccion.length}
-                          onClick={() => onExportTxtSeleccion('categoria')}
-                        >
-                          TXT Categoría (selección)
-                        </Button>
-                        <Button
-                          variant="outline-secondary"
-                          disabled={!authOK || !seleccion.length}
-                          onClick={() => onExportTxtSeleccion('tipo')}
-                        >
-                          TXT Tipo (selección)
-                        </Button>
-                        <Button
-                          variant="outline-secondary"
-                          disabled={!authOK || !seleccion.length}
-                          onClick={() => onExportTxtSeleccion('clasif')}
-                        >
-                          TXT Clasif (selección)
-                        </Button>
-                      </div>
-                      {!seleccion.length && (
-                        <div className="text-muted small mt-2">
-                          Seleccioná filas en Decidir para habilitar estas exportaciones.
-                        </div>
-                      )}
-                    </Card.Body>
-                  </Card>
-                </Col>
-                <Col md={12}>
-                  <Card className="border-0 shadow-sm">
-                    <Card.Body className="d-flex flex-wrap align-items-center justify-content-between gap-2">
-                      <div>
-                        <div className="fw-semibold">Acceso a datos archivados</div>
-                        <div className="text-muted small">
-                          Revisá el historial de decisiones archivadas de esta campaña.
-                        </div>
-                      </div>
-                      <Button variant="outline-dark" onClick={onViewArchived}>
-                        Ver archivadas en Paso 2
-                      </Button>
-                    </Card.Body>
-                  </Card>
-                </Col>
-              </Row>
+              {consolidateError && <Alert variant="danger">{consolidateError}</Alert>}
+              {consolidateLoading ? (
+                <div className="text-center text-muted">Cargando consolidación...</div>
+              ) : (
+                <Table responsive bordered size="sm">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Cambios</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {consolidateItems
+                      .slice()
+                      .sort((a, b) => Object.keys(b?.changes || {}).length - Object.keys(a?.changes || {}).length)
+                      .map((item) => {
+                      const changeEntries = Object.entries(item?.changes || {})
+                      return (
+                        <tr key={item.sku}>
+                          <td>{item.sku}</td>
+                          <td>
+                            {changeEntries.length ? (
+                              changeEntries.map(([field, value]) => {
+                                const dicKey = field === 'categoria_cod' ? 'categorias' : field === 'tipo_cod' ? 'tipos' : 'clasif'
+                                const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
+                                return (
+                                  <Badge bg="light" text="dark" className="me-2" key={field}>
+                                    {label}: {etiquetaNombre(dic?.[dicKey], value)}
+                                  </Badge>
+                                )
+                              })
+                            ) : (
+                              <Badge bg="secondary">Sin cambios</Badge>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {!consolidateItems.length && (
+                      <tr>
+                        <td colSpan={2} className="text-center text-muted">
+                          No hay SKUs en consolidación.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              )}
             </Card.Body>
           </Card>
         </Tab>
       </Tabs>
-      <Modal show={showArchiveModal} onHide={() => setShowArchiveModal(false)} centered>
+      <Modal show={Boolean(closeSummary)} onHide={() => setCloseSummary(null)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>¿Archivar decisiones exportadas?</Modal.Title>
+          <Modal.Title>Cierre de campaña</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <p className="mb-2">
-            Exportaste <strong>{lastExportKind || 'archivo'}</strong> de la campaña {campaniaId || '—'}.
-          </p>
-          <p className="text-muted small mb-0">
-            Si archivás ahora, las decisiones pendientes quedarán fuera de la vista activa y podrás verlas en el historial.
-          </p>
+          {closeSummary ? (
+            <>
+              <p><strong>Campaña:</strong> {campaniaId || '—'}</p>
+              <p><strong>Total SKUs:</strong> {closeSummary.totalSkus}</p>
+              <p><strong>Actualizados:</strong> {closeSummary.updated}</p>
+              <p><strong>Verificados:</strong> {closeSummary.verified}</p>
+              <h6 className="mt-3">Estadísticas por usuario</h6>
+              {closeSummary.statsByUser?.length ? (
+                <ul className="mb-0">
+                  {closeSummary.statsByUser.map((entry) => (
+                    <li key={entry.user}>{entry.user}: {entry.count}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted mb-0">Sin datos por usuario.</p>
+              )}
+              {closeSummary.skusWithChanges?.length ? (
+                <>
+                  <h6 className="mt-3">SKUs con cambios</h6>
+                  <ul>
+                    {closeSummary.skusWithChanges.map((item) => (
+                      <li key={item.sku}>{item.sku}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </>
+          ) : null}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="outline-secondary" onClick={() => setShowArchiveModal(false)}>
-            Más tarde
-          </Button>
-          <Button variant="primary" onClick={onArchiveAfterExport} disabled={archiveLoading}>
-            {archiveLoading ? 'Archivando…' : 'Archivar ahora'}
+          <Button variant="secondary" onClick={() => setCloseSummary(null)}>
+            Cerrar
           </Button>
         </Modal.Footer>
       </Modal>

@@ -83,6 +83,31 @@ export function importarMaestroJSON(items) {
   });
 }
 
+// ======================= Maestro (missing)
+export function getMissingMaestro(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "getMissingMaestro");
+  return fetchAuthJSON(`/api/admin/maestro/missing?${qsFrom({ campaniaId: id })}`);
+}
+
+// ======================= Confirmaciones
+export function getConfirmaciones(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "getConfirmaciones");
+  return fetchAuthJSON(`/api/admin/confirmaciones?${qsFrom({ campaniaId: id })}`);
+}
+
+// ======================= Consolidación
+export function getConsolidacionCambios(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "getConsolidacionCambios");
+  return fetchAuthJSON(`/api/admin/consolidacion/cambios?${qsFrom({ campaniaId: id })}`);
+}
+
+export function cerrarCampania(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "cerrarCampania");
+  return fetchAuthJSON(`/api/admin/campanias/${encodeURIComponent(id)}/cerrar`, {
+    method: "POST",
+  });
+}
+
 // ======================= Campañas (crear por público /api)
 export function crearCampania(data) {
   return fetchAuthJSON("/api/campanias", {
@@ -92,13 +117,23 @@ export function crearCampania(data) {
 }
 
 // ======================= Auditoría (Admin.jsx)
-export function getDiscrepancias(campaniaId) {
+export function getDiscrepancias(campaniaId, opts = {}) {
   const id = assertHasCampaignId(campaniaId, "getDiscrepancias");
-  return fetchAuthJSON(`/api/admin/discrepancias?${qsFrom({ campaniaId: id })}`);
+  const query = {
+    campaniaId: id,
+    ...(opts.sku ? { sku: String(opts.sku) } : {}),
+    ...(opts.minVotos !== undefined ? { minVotos: String(opts.minVotos) } : {}),
+  };
+  return fetchAuthJSON(`/api/admin/discrepancias?${qsFrom(query)}`);
 }
-export function getDiscrepanciasSucursales(campaniaId) {
+export function getDiscrepanciasSucursales(campaniaId, opts = {}) {
   const id = assertHasCampaignId(campaniaId, "getDiscrepanciasSucursales");
-  return fetchAuthJSON(`/api/admin/discrepancias-sucursales?${qsFrom({ campaniaId: id })}`);
+  const query = {
+    campaniaId: id,
+    ...(opts.sku ? { sku: String(opts.sku) } : {}),
+    ...(opts.minSucursales !== undefined ? { minSucursales: String(opts.minSucursales) } : {}),
+  };
+  return fetchAuthJSON(`/api/admin/discrepancias-sucursales?${qsFrom(query)}`);
 }
 export function exportDiscrepanciasCSV(campaniaId) {
   const id = assertHasCampaignId(campaniaId, "exportDiscrepanciasCSV");
@@ -220,25 +255,46 @@ export function exportActualizacionesCSV(campaniaId) {
 }
 
 // ======================= Exports TXT (por campo)
-export function exportTxtCategoria(campaniaId, estado = "aceptadas", incluirArchivadas = false) {
+export function exportTxtCategoria(campaniaId, estado = "applied", incluirArchivadas = false) {
   const id = assertHasCampaignId(campaniaId, "exportTxtCategoria");
   return fetchAuthBlob(`/api/admin/export/txt/categoria?${qsFrom({
-    campaniaId: id, estado, ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
+    campaniaId: id,
+    scope: estado,
+    ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
   })}`);
 }
 
-export function exportTxtTipo(campaniaId, estado = "aceptadas", incluirArchivadas = false) {
+export function exportTxtTipo(campaniaId, estado = "applied", incluirArchivadas = false) {
   const id = assertHasCampaignId(campaniaId, "exportTxtTipo");
   return fetchAuthBlob(`/api/admin/export/txt/tipo?${qsFrom({
-    campaniaId: id, estado, ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
+    campaniaId: id,
+    scope: estado,
+    ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
   })}`);
 }
 
-export function exportTxtClasif(campaniaId, estado = "aceptadas", incluirArchivadas = false) {
+export function exportTxtClasif(campaniaId, estado = "applied", incluirArchivadas = false) {
   const id = assertHasCampaignId(campaniaId, "exportTxtClasif");
   return fetchAuthBlob(`/api/admin/export/txt/clasif?${qsFrom({
-    campaniaId: id, estado, ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
+    campaniaId: id,
+    scope: estado,
+    ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
   })}`);
+}
+
+export function exportSummaryTxt(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "exportSummaryTxt");
+  return fetchAuthBlob(`/api/admin/export/txt/summary?${qsFrom({ campaniaId: id })}`);
+}
+
+export async function fetchAdminBlobByUrl(url) {
+  const fullUrl = url.startsWith("http") ? url : `${API_BASE}${url}`;
+  const resp = await fetch(fullUrl, { headers: authHeaders() });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(text || `HTTP ${resp.status}`);
+  }
+  return resp.blob();
 }
 
 function normalizeDictionaryPayload(payload) {
