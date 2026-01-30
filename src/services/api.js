@@ -37,10 +37,35 @@ export async function setActiveCampaign(id) {
 }
 
 // ---- Maestro + Escaneos
+const MASTER_TIMEOUT_MS = 8000;
 export async function getMasterBySku(sku) {
   const limpio = String(sku || "").trim().toUpperCase();
   if (!limpio) throw new Error("SKU vacío");
-  return fetchJSON(`/maestro/${encodeURIComponent(limpio)}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), MASTER_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(API(`/maestro/${encodeURIComponent(limpio)}`), {
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("No se pudo consultar el maestro. Reintentar. (timeout)");
+    }
+    throw new Error("No se pudo consultar el maestro. Reintentar.");
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  if (res.status === 404) return null;
+  const ct = res.headers.get("content-type") || "";
+  const isJSON = ct.includes("application/json");
+  const body = isJSON ? await res.json().catch(() => null) : await res.text().catch(() => "");
+  if (!res.ok) {
+    const msg = (isJSON && body?.error) ? body.error : String(body || res.statusText);
+    throw new Error(`No se pudo consultar el maestro. Reintentar. (${msg})`);
+  }
+  return isJSON ? body : {};
 }
 
 export async function getMaestroList({ q = '', page = 1, pageSize = 50 } = {}) {
@@ -53,7 +78,14 @@ export async function getMaestroList({ q = '', page = 1, pageSize = 50 } = {}) {
 }
 
 
-export async function saveScan({ email, sucursal, campaniaId, skuRaw, sugeridos = {} }) {
+export async function saveScan({
+  email,
+  sucursal,
+  campaniaId,
+  skuRaw,
+  skuNormalized,
+  sugeridos = {},
+}) {
   const normalizeSuggestedCode = (value) => {
     const trimmed = String(value || "").trim();
     return trimmed ? pad2(trimmed) : "";
@@ -63,6 +95,7 @@ export async function saveScan({ email, sucursal, campaniaId, skuRaw, sugeridos 
     sucursal: String(sucursal||'').trim(),
     campaniaId: Number(campaniaId||0),
     skuRaw: String(skuRaw||'').trim(),
+    skuNormalized: String(skuNormalized||'').trim(),
     sugeridos: {
       categoria_cod: normalizeSuggestedCode(sugeridos.categoria_cod),
       tipo_cod: normalizeSuggestedCode(sugeridos.tipo_cod),

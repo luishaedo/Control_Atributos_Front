@@ -53,7 +53,14 @@ export default function ScanBox({ user, campania }) {
     setSku(limpio);
     if (!limpio) return;
 
-    const maestro = await getMasterBySku(limpio).catch(() => null);
+    let maestro = null;
+    try {
+      maestro = await getMasterBySku(limpio);
+    } catch (e) {
+      setError(e?.message || "No se pudo consultar el maestro. Reintentar.");
+      setResultado(null);
+      return;
+    }
     if (!maestro) {
       setResultado({ estado: "NO_MAESTRO", maestro: null, asumidos: null });
       setSugeridos({});
@@ -95,20 +102,27 @@ export default function ScanBox({ user, campania }) {
       }
     }
     // Sólo enviamos al back lo necesario (email, sucursal, campaniaId, sku, sugeridos)
+    let response = null;
     try {
       setError("");
-      await saveScan({
+      response = await saveScan({
         email: user?.email,
         sucursal: user?.sucursal,
         campaniaId: campania?.id,
-        skuRaw: sku,
+        skuRaw: skuRaw,
+        skuNormalized: sku,
         sugeridos,
       });
     } catch (e) {
       setError(e?.message || "No se pudo guardar.");
       return;
     }
-    setGuardadoInfo({ sku, at: new Date() });
+    setGuardadoInfo({
+      sku,
+      at: new Date(),
+      skuType: response?.skuType || null,
+      unknown: response?.unknown || null,
+    });
     setSkuRaw("");
     setSku("");
     setSugeridos({});
@@ -190,6 +204,14 @@ export default function ScanBox({ user, campania }) {
         {guardadoInfo && (
           <Alert variant="success" className="mt-3">
             Guardado OK · SKU {guardadoInfo.sku} · {guardadoInfo.at.toLocaleString()}
+            {guardadoInfo.skuType === "UNKNOWN" && guardadoInfo.unknown && (
+              <div className="mt-1 text-muted small">
+                Unknown · Estado: {guardadoInfo.unknown.status || "—"}
+                {guardadoInfo.unknown.seenCount !== undefined
+                  ? ` · Visto ${guardadoInfo.unknown.seenCount} veces`
+                  : ""}
+              </div>
+            )}
           </Alert>
         )}
 
