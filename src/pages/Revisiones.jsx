@@ -108,6 +108,7 @@ function hasValidCode(dicArr, code) {
   return (dicArr || []).some((item) => item.cod === normalized)
 }
 function resolveAttributeValue(item, field) {
+function getNewAttributeValue(item, field) {
   const accepted = getAcceptedAttributeCode(item?.propuestas, field)
   if (accepted) return accepted
   if (field === 'categoria_cod') return item?.maestro?.categoria_cod || ''
@@ -120,6 +121,30 @@ function descargarBlobDirecto(blob, nombre) {
   a.href = url; a.download = nombre
   document.body.appendChild(a); a.click(); a.remove()
   URL.revokeObjectURL(url)
+}
+function getNewAttributeValue(item, field) {
+  const accepted = getAcceptedAttributeCode(item?.propuestas, field)
+  if (accepted) return accepted
+  if (field === 'categoria_cod') return item?.maestro?.categoria_cod || ''
+  if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
+  return item?.maestro?.clasif_cod || ''
+}
+  function descargarBlobDirecto(blob, nombre) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = nombre
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function descargarBlobDesdeUrl(url, nombre) {
+    const blob = await fetchAdminBlobByUrl(url)
+    descargarBlobDirecto(blob, nombre)
+  }
+
+async function descargarBlobDesdeUrl(url, nombre) {
+  const blob = await fetchAdminBlobByUrl(url)
+  descargarBlobDirecto(blob, nombre)
 }
 
 async function descargarBlobDesdeUrl(url, nombre) {
@@ -478,6 +503,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     const overrides = unknownEdits[item.sku] || {}
     if (overrides[field]) return overrides[field]
     return resolveAttributeValue(item, field)
+    return getNewAttributeValue(item, field)
   }
 
   function getChangeCountForItem(item) {
@@ -501,6 +527,165 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       hasValidCode(dic?.tipos, edits.tipo_cod) &&
       hasValidCode(dic?.clasif, edits.clasif_cod)
     )
+  }
+
+  function onUpdateUnknown(sku, field, value) {
+    setUnknownEdits((prev) => ({
+      ...prev,
+      [sku]: {
+        ...(prev[sku] || {}),
+        [field]: value
+      }
+    }))
+  }
+
+  function onMarkReady(item) {
+    if (!item?.sku) return
+    setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
+    setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
+  }
+
+  function onMoveUnknownToConfirm(item) {
+    if (!item?.sku) return
+    if (!isUnknownReady(item.sku)) return
+    setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
+    setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
+  }
+
+  function onToggleConfirmFlag(sku, value) {
+    setConfirmFlags((prev) => ({ ...prev, [sku]: value }))
+  }
+
+  function onApplyConfirmation() {
+    setStageBySku((prev) => {
+      const next = { ...prev }
+      confirmQueue.forEach((item) => {
+        const shouldConfirm = confirmFlags[item.sku] !== false
+        next[item.sku] = shouldConfirm ? 'consolidate' : 'evaluate'
+      })
+      return next
+    })
+    setActiveTab('consolidate')
+    loadConsolidacion()
+  }
+
+  function buildSummary() {
+    const statsByUser = {}
+    const items = consolidateQueue.map((item) => {
+      const fields = ['categoria_cod', 'tipo_cod', 'clasif_cod']
+      const changes = fields.map((field) => {
+        const original = field === 'categoria_cod'
+          ? item?.maestro?.categoria_cod
+          : field === 'tipo_cod'
+            ? item?.maestro?.tipo_cod
+            : item?.maestro?.clasif_cod
+        const nextValue = getEffectiveValue(item, field)
+        return {
+          field,
+          oldValue: original || '',
+          newValue: nextValue || ''
+        }
+      })
+      item?.propuestas?.forEach((p) => {
+        ;(p.usuarios || []).forEach((u) => {
+          statsByUser[u] = (statsByUser[u] || 0) + 1
+        })
+      })
+      return { sku: item.sku, changes }
+    })
+    const totalSkus = consolidateQueue.length
+    const updatedSkus = consolidateQueue.filter((item) => getChangeCountForItem(item) > 0).length
+    const verifiedSkus = consolidateQueue.filter((item) => getChangeCountForItem(item) === 0).length
+    return {
+      totalSkus,
+      updatedSkus,
+      verifiedSkus,
+      statsByUser,
+      items
+    }
+  }
+
+  function exportSummaryFiles(summary) {
+    const header = [
+      `Campaña: ${campaniaId || '—'}`,
+      `Total SKUs: ${summary.totalSkus}`,
+      `Actualizados: ${summary.updatedSkus}`,
+      `Verificados: ${summary.verifiedSkus}`
+    ]
+    const statsLines = Object.entries(summary.statsByUser).map(([email, count]) => `${email}\t${count}`)
+    const skuLines = summary.items.flatMap((item) =>
+      item.changes.map((change) => `${item.sku}\t${change.field}\t${change.oldValue}\t${change.newValue}`)
+    )
+    const txtBody = [
+      'RESUMEN',
+      ...header,
+      '',
+      'ESTADISTICAS POR USUARIO',
+      ...statsLines,
+      '',
+      'SKU / CAMBIOS',
+      ...skuLines
+    ].join('\n')
+    const txtBlob = new Blob([`\ufeff${txtBody}`], { type: 'text/plain;charset=utf-8' })
+    descargarBlobDirecto(txtBlob, `campania_${campaniaId}_resumen.txt`)
+
+    const csvLines = [
+      ['section', 'key', 'value'].join(','),
+      ...header.map((line) => ['summary', ...line.split(': ').map((v) => `"${v}"`)].join(',')),
+      '',
+      ['section', 'email', 'count'].join(','),
+      ...Object.entries(summary.statsByUser).map(([email, count]) => `stats,${email},${count}`),
+      '',
+      ['section', 'sku', 'field', 'old_value', 'new_value'].join(','),
+      ...summary.items.flatMap((item) =>
+        item.changes.map((change) =>
+          `changes,${item.sku},${change.field},${change.oldValue},${change.newValue}`
+        )
+      )
+    ].join('\n')
+    const csvBlob = new Blob([`\ufeff${csvLines}`], { type: 'text/csv;charset=utf-8' })
+    descargarBlobDirecto(csvBlob, `campania_${campaniaId}_resumen.csv`)
+  }
+
+  async function onCloseCampaign() {
+    try {
+      const response = await cerrarCampania(Number(campaniaId))
+      if (response?.summary) {
+        setCloseSummary(response.summary)
+      } else {
+        setCloseSummary(null)
+        setToast({
+          show: true,
+          variant: 'warning',
+          message: 'La campaña se cerró, pero no se recibió el resumen.'
+        })
+      }
+
+      const exports = response?.exports || {}
+      setExportLoading(true)
+      try {
+        await descargarTxtPorScope('applied', exports.applied || null)
+        await descargarTxtPorScope('unknown', exports.unknown || null)
+        if (exports.summaryTxt) {
+          await descargarBlobDesdeUrl(exports.summaryTxt, `summary_campania_${campaniaId}.txt`)
+        } else {
+          const summaryBlob = await exportSummaryTxt(Number(campaniaId))
+          descargarBlobDirecto(summaryBlob, `summary_campania_${campaniaId}.txt`)
+        }
+      } finally {
+        setExportLoading(false)
+      }
+
+      loadConsolidacion()
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo cerrar la campaña.'
+      })
+    }
+  }
+
   }
 
   function onUpdateUnknown(sku, field, value) {
@@ -1286,6 +1471,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                             ? it.maestro?.tipo_cod
                             : it.maestro?.clasif_cod
                         const acceptedCode = getAcceptedAttributeCode(it.propuestas, field)
+                        const isLocked = Boolean(acceptedCode)
                         const meta = buildAttributeOptions(it.propuestas, field)
                         const filteredOptions = meta.options.filter((opt) => String(opt.code) !== String(maestroCode))
                         const label = field === 'categoria_cod' ? 'Categoría' : field === 'tipo_cod' ? 'Tipo' : 'Clasificación'
@@ -1318,6 +1504,11 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                 <div className="fw-semibold">{label}</div>
                                 <div className="text-muted small">{meta.total} votos</div>
                               </div>
+                              {isLocked && (
+                                <div className="text-muted small mt-1">
+                                  Deshacé la decisión para evaluar otra opción.
+                                </div>
+                              )}
                               <div className="mt-2 d-flex flex-column gap-2">
                                 {filteredOptions.map((opt) => {
                                   const consensus = consensusLabel(opt.share)
@@ -1649,6 +1840,18 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 </div>
               </div>
               <div className="d-flex flex-wrap gap-2">
+                <Button
+                  variant="outline-primary"
+                  onClick={onDownloadAppliedTxts}
+                  disabled={exportLoading || consolidateLoading}
+                >
+                  Descargar aplicados (3 TXT)
+                </Button>
+                <Button
+                  variant="outline-warning"
+                  onClick={onDownloadUnknownTxts}
+                  disabled={exportLoading || consolidateLoading}
+                >
                 <Button
                   variant="outline-primary"
                   onClick={onDownloadAppliedTxts}
