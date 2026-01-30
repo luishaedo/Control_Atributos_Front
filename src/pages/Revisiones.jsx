@@ -45,6 +45,7 @@ import {
   archivarActualizaciones, undoActualizacion, revertirActualizacion,
   // TXT
   exportTxtCategoria, exportTxtTipo, exportTxtClasif, exportSummaryTxt, fetchAdminBlobByUrl,
+  updateUnknownSku, confirmUnknownSku,
 } from '../services/adminApi'
 
 // ===== Helpers =====
@@ -460,11 +461,35 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
   }
 
-  function onMoveUnknownToConfirm(item) {
+  async function onMoveUnknownToConfirm(item) {
     if (!item?.sku) return
     if (!isUnknownReady(item.sku)) return
-    setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
-    setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
+    const payload = {
+      campaniaId: Number(campaniaId),
+      categoria_cod: unknownEdits[item.sku]?.categoria_cod || '',
+      tipo_cod: unknownEdits[item.sku]?.tipo_cod || '',
+      clasif_cod: unknownEdits[item.sku]?.clasif_cod || '',
+      updatedBy: 'admin@local',
+    }
+    try {
+      await updateUnknownSku(item.sku, payload)
+      await confirmUnknownSku(item.sku, {
+        campaniaId: Number(campaniaId),
+        updatedBy: 'admin@local',
+      })
+      await Promise.all([cargar(), loadConfirmaciones()])
+      setToast({
+        show: true,
+        variant: 'success',
+        message: `SKU ${item.sku} enviado a confirmación.`
+      })
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo enviar el SKU a confirmación.'
+      })
+    }
   }
 
   function onToggleConfirmFlag(sku, value) {
