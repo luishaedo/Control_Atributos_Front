@@ -62,28 +62,6 @@ function getNewAttributeValue(item, field) {
   if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
   return item?.maestro?.clasif_cod || ''
 }
-  function descargarBlobDirecto(blob, nombre) {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = nombre
-    document.body.appendChild(a); a.click(); a.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  async function descargarBlobDesdeUrl(url, nombre) {
-    const blob = await fetchAdminBlobByUrl(url)
-    descargarBlobDirecto(blob, nombre)
-  }
-
-async function descargarBlobDesdeUrl(url, nombre) {
-  const blob = await fetchAdminBlobByUrl(url)
-  descargarBlobDirecto(blob, nombre)
-}
-
-async function descargarBlobDesdeUrl(url, nombre) {
-  const blob = await fetchAdminBlobByUrl(url)
-  descargarBlobDirecto(blob, nombre)
-}
 
 async function descargarBlobDesdeUrl(url, nombre) {
   const blob = await fetchAdminBlobByUrl(url)
