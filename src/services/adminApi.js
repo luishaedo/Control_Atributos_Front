@@ -112,30 +112,48 @@ export function confirmUnknownSku(sku, payload = {}) {
 }
 
 export function updateUnknown(payload = {}) {
-  return fetchAuthJSON(`/api/admin/desconocidos`, {
+  const sku = payload?.sku;
+  if (!sku) throw new Error("sku requerido para updateUnknown");
+  return fetchAuthJSON(`/api/admin/desconocidos/${encodeURIComponent(String(sku).trim().toUpperCase())}`, {
     method: "PATCH",
     body: JSON.stringify(payload || {}),
   });
 }
 
 export function confirmUnknown(payload = {}) {
-  return fetchAuthJSON(`/api/admin/desconocidos/confirmar`, {
-    method: "POST",
-    body: JSON.stringify(payload || {}),
-  });
+  const unknownId = payload?.unknownId;
+  if (unknownId) {
+    return fetchAuthJSON(`/api/admin/unknowns/${encodeURIComponent(unknownId)}/approve`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  const sku = payload?.sku;
+  if (!sku) throw new Error("unknownId o sku requerido para confirmUnknown");
+  return confirmUnknownSku(sku, payload);
 }
 
 export function rejectUnknown(payload = {}) {
-  return fetchAuthJSON(`/api/admin/desconocidos/reject`, {
+  const unknownId = payload?.unknownId;
+  if (!unknownId) throw new Error("unknownId requerido para rejectUnknown");
+  return fetchAuthJSON(`/api/admin/unknowns/${encodeURIComponent(unknownId)}/reject`, {
     method: "POST",
     body: JSON.stringify(payload || {}),
   });
 }
 
-export function mergeUnknown(payload = {}) {
-  return fetchAuthJSON(`/api/admin/desconocidos/merge`, {
+export function moverEtapa({ campaniaId, sku, stage, updatedBy } = {}) {
+  const id = assertHasCampaignId(campaniaId, "moverEtapa");
+  if (!sku) throw new Error("sku requerido para moverEtapa");
+  if (!stage) throw new Error("stage requerido para moverEtapa");
+  return fetchAuthJSON(`/api/admin/etapas/mover`, {
     method: "POST",
-    body: JSON.stringify(payload || {}),
+    body: JSON.stringify({
+      campaniaId: Number(id),
+      sku: String(sku).trim().toUpperCase(),
+      stage: String(stage),
+      ...(updatedBy ? { updatedBy } : {}),
+    }),
   });
 }
 
@@ -156,6 +174,14 @@ export function cerrarCampania(campaniaId) {
 export function crearCampania(data) {
   return fetchAuthJSON("/api/campanias", {
     method: "POST",
+    body: JSON.stringify(data || {}),
+  });
+}
+
+export function actualizarCampania(id, data) {
+  if (!id) throw new Error("id requerido para actualizarCampania");
+  return fetchAuthJSON(`/api/admin/campanias/${encodeURIComponent(id)}`, {
+    method: "PATCH",
     body: JSON.stringify(data || {}),
   });
 }
@@ -299,30 +325,27 @@ export function exportActualizacionesCSV(campaniaId) {
 }
 
 // ======================= Exports TXT (por campo)
-export function exportTxtCategoria(campaniaId, estado = "applied", incluirArchivadas = false) {
+export function exportTxtCategoria(campaniaId, estado = "applied") {
   const id = assertHasCampaignId(campaniaId, "exportTxtCategoria");
   return fetchAuthBlob(`/api/admin/export/txt/categoria?${qsFrom({
     campaniaId: id,
     scope: estado,
-    ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
   })}`);
 }
 
-export function exportTxtTipo(campaniaId, estado = "applied", incluirArchivadas = false) {
+export function exportTxtTipo(campaniaId, estado = "applied") {
   const id = assertHasCampaignId(campaniaId, "exportTxtTipo");
   return fetchAuthBlob(`/api/admin/export/txt/tipo?${qsFrom({
     campaniaId: id,
     scope: estado,
-    ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
   })}`);
 }
 
-export function exportTxtClasif(campaniaId, estado = "applied", incluirArchivadas = false) {
+export function exportTxtClasif(campaniaId, estado = "applied") {
   const id = assertHasCampaignId(campaniaId, "exportTxtClasif");
   return fetchAuthBlob(`/api/admin/export/txt/clasif?${qsFrom({
     campaniaId: id,
     scope: estado,
-    ...(incluirArchivadas ? { incluirArchivadas: "true" } : {})
   })}`);
 }
 

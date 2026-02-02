@@ -66,13 +66,35 @@ export function consensusLabel(share, threshold = 0.6) {
 }
 
 export function getAcceptedAttributeCode(propuestas = [], field) {
-  const accepted = propuestas.find((p) => p?.decision && p?.decision?.estado !== 'rechazada' && p?.[field])
-  return accepted?.[field] || ''
+  const decisionKey =
+    field === 'categoria_cod'
+      ? 'new_categoria_cod'
+      : field === 'tipo_cod'
+        ? 'new_tipo_cod'
+        : 'new_clasif_cod'
+  for (const p of propuestas) {
+    const decision = p?.decision
+    if (!decision || decision?.estado === 'rechazada') continue
+    const value = decision?.[decisionKey]
+    if (value) return value
+  }
+  return ''
 }
 
 export function getAcceptedAttributeDecision(propuestas = [], field) {
-  const accepted = propuestas.find((p) => p?.decision && p?.decision?.estado !== 'rechazada' && p?.[field])
-  return accepted?.decision || null
+  const decisionKey =
+    field === 'categoria_cod'
+      ? 'new_categoria_cod'
+      : field === 'tipo_cod'
+        ? 'new_tipo_cod'
+        : 'new_clasif_cod'
+  for (const p of propuestas) {
+    const decision = p?.decision
+    if (!decision || decision?.estado === 'rechazada') continue
+    const value = decision?.[decisionKey]
+    if (value) return decision
+  }
+  return null
 }
 
 export function hasValidCode(dicArr, code) {

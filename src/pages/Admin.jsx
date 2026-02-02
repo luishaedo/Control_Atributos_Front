@@ -1,14 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 import React, { useEffect, useState } from 'react'
-import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Spinner } from 'react-bootstrap'
+import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Spinner, Accordion, Modal, Pagination } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
 import IdentityModal from '../components/IdentityModal.jsx'
-import { getCampaigns, setActiveCampaign } from '../services/api.js'
+import { getCampaigns, setActiveCampaign, getDictionaries, getMaestroList } from '../services/api.js'
 import Revisiones from './Revisiones.jsx'
 import {
   adminPing, adminSetToken, adminGetToken,
-  importarDiccionariosJSON, importarMaestroJSON,
-  crearCampania,
+  crearCampania, actualizarCampania,
   exportMaestroCSV, exportCategoriasCSV, exportTiposCSV, exportClasifCSV
 } from '../services/adminApi.js'
 import { uploadDiccionarios, uploadMaestro } from '../services/adminImportApi.js'
@@ -37,14 +36,11 @@ export default function Admin() {
   const [importMsg, setImportMsg] = useState('')
   const [isUploadingDic, setIsUploadingDic] = useState(false)
   const [isUploadingMae, setIsUploadingMae] = useState(false)
-  const [dicEjemplo, setDicEjemplo] = useState(JSON.stringify({
-    categorias: [{ cod: '01', nombre: 'Jean' }],
-    tipos: [{ cod: '10', nombre: 'Slim' }],
-    clasif: [{ cod: '12', nombre: 'Hombre' }]
-  }, null, 2))
-  const [maestroEjemplo, setMaestroEjemplo] = useState(JSON.stringify([
-    { sku: 'THJ00406207', descripcion: 'Jean Runden Slim Hombre', categoria_cod: '01', tipo_cod: '10', clasif_cod: '12' }
-  ], null, 2))
+  const [dicPreview, setDicPreview] = useState(null)
+  const [maestroPreview, setMaestroPreview] = useState({ items: [], total: 0 })
+  const [maestroQuery, setMaestroQuery] = useState('')
+  const [maestroPage, setMaestroPage] = useState(1)
+  const maestroPageSize = 20
 
   const [campanias, setCampanias] = useState([])
   const [nuevaCamp, setNuevaCamp] = useState({
@@ -54,6 +50,8 @@ export default function Admin() {
   const navigate = useNavigate()
   const isUploading = isUploadingDic || isUploadingMae
   const [showIdentityModal, setShowIdentityModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editCamp, setEditCamp] = useState(null)
 
   useEffect(() => {
     if (token) {
@@ -61,7 +59,13 @@ export default function Admin() {
       adminPing().then(() => setAuthOK(true)).catch(() => setAuthOK(false))
     }
     cargarCampanias()
+    cargarPreview()
   }, [])
+
+  useEffect(() => {
+    cargarPreview()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maestroQuery, maestroPage])
 
   function guardarIdentificacion(nuevo) {
     setUser(nuevo)
@@ -86,6 +90,7 @@ export default function Admin() {
       setImportMsg('')
       const r = await uploadDiccionarios(filesDic)
       setImportMsg(`Diccionarios OK → categorías=${r.categorias}, tipos=${r.tipos}, clasif=${r.clasif}`)
+      cargarPreview()
     } catch (e) {
       setError(e.message || 'Error importando diccionarios (archivo)')
     } finally {
@@ -104,6 +109,7 @@ export default function Admin() {
       setImportMsg('')
       const r = await uploadMaestro({ maestro: fileMae })
       setImportMsg(`Maestro OK → ${r.count} items`)
+      cargarPreview()
     } catch (e) {
       setError(e.message || 'Error importando maestro (archivo)')
     } finally {
@@ -118,6 +124,20 @@ export default function Admin() {
     } catch (_) { /* noop */ }
   }
 
+  async function cargarPreview() {
+    try {
+      const [dic, maestro] = await Promise.all([
+        getDictionaries(),
+        getMaestroList({ q: maestroQuery, page: maestroPage, pageSize: maestroPageSize }),
+      ])
+      setDicPreview(dic)
+      setMaestroPreview({
+        items: maestro?.items || [],
+        total: maestro?.total || 0,
+      })
+    } catch (_) { /* noop */ }
+  }
+
   async function doLogin(e) {
     e.preventDefault()
     try {
@@ -128,28 +148,6 @@ export default function Admin() {
     } catch {
       setAuthOK(false)
       setError('Token inválido o el servidor no respondió')
-    }
-  }
-
-  async function subirDiccionarios() {
-    try {
-      setError(null)
-      const payload = JSON.parse(dicEjemplo)
-      const r = await importarDiccionariosJSON(payload)
-      alert('OK: ' + JSON.stringify(r))
-    } catch (e) {
-      setError(e.message || 'Error importando diccionarios (¿JSON válido?)')
-    }
-  }
-
-  async function subirMaestro() {
-    try {
-      setError(null)
-      const items = JSON.parse(maestroEjemplo)
-      const r = await importarMaestroJSON(items)
-      alert('OK: ' + JSON.stringify(r))
-    } catch (e) {
-      setError(e.message || 'Error importando maestro (¿JSON válido?)')
     }
   }
 
@@ -174,6 +172,38 @@ export default function Admin() {
       cargarCampanias()
     } catch (e) {
       setError(e.message || 'No se pudo activar')
+    }
+  }
+
+  function abrirEdicion(c) {
+    setEditCamp({
+      id: c.id,
+      nombre: c.nombre || '',
+      inicia: c.inicia ? String(c.inicia).slice(0, 10) : '',
+      termina: c.termina ? String(c.termina).slice(0, 10) : '',
+      categoria_objetivo_cod: c.categoria_objetivo_cod || '',
+      tipo_objetivo_cod: c.tipo_objetivo_cod || '',
+      clasif_objetivo_cod: c.clasif_objetivo_cod || ''
+    })
+    setShowEditModal(true)
+  }
+
+  async function guardarEdicionCampania() {
+    if (!editCamp?.id) return
+    try {
+      await actualizarCampania(editCamp.id, {
+        nombre: editCamp.nombre,
+        inicia: editCamp.inicia,
+        termina: editCamp.termina,
+        categoria_objetivo_cod: editCamp.categoria_objetivo_cod,
+        tipo_objetivo_cod: editCamp.tipo_objetivo_cod,
+        clasif_objetivo_cod: editCamp.clasif_objetivo_cod,
+      })
+      setShowEditModal(false)
+      setEditCamp(null)
+      cargarCampanias()
+    } catch (e) {
+      setError(e.message || 'No se pudo actualizar la campaÃ±a')
     }
   }
 
@@ -323,50 +353,119 @@ export default function Admin() {
     </div>
   </Card.Body>
 </Card>
-            <Row>
-              <Col md={6}>
-              <Card className="mb-3">
-                  <Card.Header>Importar Diccionarios (JSON)</Card.Header>
-                  <Card.Body>
-                    <Form.Group className="mb-2">
-                      <Form.Label>Payload ejemplo</Form.Label>
-                      <Form.Control as="textarea" rows={10} value={dicEjemplo} onChange={e => setDicEjemplo(e.target.value)} />
-                    </Form.Group>
-                    <div className="d-flex gap-2 flex-wrap">
-                      <Button onClick={subirDiccionarios} disabled={!authOK}>Subir diccionarios</Button>
-                      <Button variant="outline-secondary" onClick={() => descargarBlob(exportCategoriasCSV, 'categorias.csv')} disabled={!authOK}>
-                        Descargar categorías (CSV)
-                      </Button>
-                      <Button variant="outline-secondary" onClick={() => descargarBlob(exportTiposCSV, 'tipos.csv')} disabled={!authOK}>
-                        Descargar tipos (CSV)
-                      </Button>
-                      <Button variant="outline-secondary" onClick={() => descargarBlob(exportClasifCSV, 'clasif.csv')} disabled={!authOK}>
-                        Descargar clasif (CSV)
-                      </Button>
-                    </div>
-                  </Card.Body>
-                </Card>
-                
-              </Col>
-
-              <Col md={6}>
-                <Card className="mb-3">
-                  <Card.Header>Importar Maestro (JSON)</Card.Header>
-                  <Card.Body>
-                    <Form.Group className="mb-2">
-                      <Form.Label>Lista de items</Form.Label>
-                      <Form.Control as="textarea" rows={10} value={maestroEjemplo} onChange={e => setMaestroEjemplo(e.target.value)} />
-                    </Form.Group>
-                    <div className="d-flex gap-2 flex-wrap">
-                      <Button onClick={subirMaestro} disabled={!authOK}>Subir maestro</Button>
-                      <Button variant="outline-secondary" onClick={() => descargarBlob(exportMaestroCSV, 'maestro.csv')} disabled={!authOK}>
-                        Descargar Maestro (CSV)
-                      </Button>
-                    </div>
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
+            <div className="d-flex justify-content-end mb-2">
+              <Button variant="outline-secondary" size="sm" onClick={cargarPreview}>
+                Actualizar vista
+              </Button>
+            </div>
+            <Accordion className="mb-3">
+              <Accordion.Item eventKey="diccionarios">
+                <Accordion.Header>Ver diccionarios cargados</Accordion.Header>
+                <Accordion.Body>
+                  <div className="d-flex gap-2 flex-wrap mb-3">
+                    <Button variant="outline-secondary" onClick={() => descargarBlob(exportCategoriasCSV, "categorias.csv")} disabled={!authOK}>
+                      Descargar categorías (CSV)
+                    </Button>
+                    <Button variant="outline-secondary" onClick={() => descargarBlob(exportTiposCSV, "tipos.csv")} disabled={!authOK}>
+                      Descargar tipos (CSV)
+                    </Button>
+                    <Button variant="outline-secondary" onClick={() => descargarBlob(exportClasifCSV, "clasif.csv")} disabled={!authOK}>
+                      Descargar clasif (CSV)
+                    </Button>
+                  </div>
+                  <Row className="g-3">
+                    <Col md={4}>
+                      <div className="fw-semibold mb-2">Categorías</div>
+                      <Table size="sm" bordered hover>
+                        <thead><tr><th>Cod</th><th>Nombre</th></tr></thead>
+                        <tbody>
+                          {(dicPreview?.categorias || []).map((c) => (
+                            <tr key={c.cod}><td>{c.cod}</td><td>{c.nombre}</td></tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </Col>
+                    <Col md={4}>
+                      <div className="fw-semibold mb-2">Tipos</div>
+                      <Table size="sm" bordered hover>
+                        <thead><tr><th>Cod</th><th>Nombre</th></tr></thead>
+                        <tbody>
+                          {(dicPreview?.tipos || []).map((c) => (
+                            <tr key={c.cod}><td>{c.cod}</td><td>{c.nombre}</td></tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </Col>
+                    <Col md={4}>
+                      <div className="fw-semibold mb-2">Clasif</div>
+                      <Table size="sm" bordered hover>
+                        <thead><tr><th>Cod</th><th>Nombre</th></tr></thead>
+                        <tbody>
+                          {(dicPreview?.clasif || []).map((c) => (
+                            <tr key={c.cod}><td>{c.cod}</td><td>{c.nombre}</td></tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </Col>
+                  </Row>
+                </Accordion.Body>
+              </Accordion.Item>
+              <Accordion.Item eventKey="maestro">
+                <Accordion.Header>Ver maestro cargado</Accordion.Header>
+                <Accordion.Body>
+                  <div className="d-flex gap-2 flex-wrap mb-3 align-items-center">
+                    <Button variant="outline-secondary" onClick={() => descargarBlob(exportMaestroCSV, "maestro.csv")} disabled={!authOK}>
+                      Descargar Maestro (CSV)
+                    </Button>
+                    <div className="text-muted small">Total: {maestroPreview.total}</div>
+                    <Form.Control
+                      size="sm"
+                      placeholder="Buscar SKU o descripciÃ³n"
+                      value={maestroQuery}
+                      onChange={e => { setMaestroPage(1); setMaestroQuery(e.target.value) }}
+                      style={{ maxWidth: 260 }}
+                    />
+                  </div>
+                  <Table size="sm" bordered hover>
+                    <thead>
+                      <tr>
+                        <th>SKU</th>
+                        <th>Descripción</th>
+                        <th>Cat</th>
+                        <th>Tipo</th>
+                        <th>Clasif</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(maestroPreview.items || []).map((m) => (
+                        <tr key={m.sku}>
+                          <td>{m.sku}</td>
+                          <td>{m.descripcion}</td>
+                          <td>{m.categoria_cod}</td>
+                          <td>{m.tipo_cod}</td>
+                          <td>{m.clasif_cod}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                  <div className="d-flex justify-content-center">
+                    <Pagination size="sm">
+                      <Pagination.First onClick={() => setMaestroPage(1)} disabled={maestroPage === 1} />
+                      <Pagination.Prev onClick={() => setMaestroPage(p => Math.max(1, p - 1))} disabled={maestroPage === 1} />
+                      <Pagination.Item active>{maestroPage}</Pagination.Item>
+                      <Pagination.Next
+                        onClick={() => setMaestroPage(p => Math.min(Math.max(1, Math.ceil(maestroPreview.total / maestroPageSize)), p + 1))}
+                        disabled={maestroPage >= Math.max(1, Math.ceil(maestroPreview.total / maestroPageSize))}
+                      />
+                      <Pagination.Last
+                        onClick={() => setMaestroPage(Math.max(1, Math.ceil(maestroPreview.total / maestroPageSize)))}
+                        disabled={maestroPage >= Math.max(1, Math.ceil(maestroPreview.total / maestroPageSize))}
+                      />
+                    </Pagination>
+                  </div>
+                </Accordion.Body>
+              </Accordion.Item>
+            </Accordion>
           </Tab>
 
           <Tab eventKey="campanias" title="Campañas">
@@ -420,14 +519,24 @@ export default function Admin() {
                           <small className="text-muted">{c.inicia} → {c.termina}</small>
                           <div><small>Filtros: {c.categoria_objetivo_cod || '—'} / {c.tipo_objetivo_cod || '—'} / {c.clasif_objetivo_cod || '—'}</small></div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant={c.activa ? 'success' : 'outline-secondary'}
-                          onClick={() => activarCamp(c.id)}
-                          disabled={!authOK}
-                        >
-                          {c.activa ? 'Activa' : 'Activar'}
-                        </Button>
+                        <div className="d-flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            onClick={() => abrirEdicion(c)}
+                            disabled={!authOK || c.activatedOnce}
+                          >
+                            Editar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={c.activa ? 'success' : 'outline-secondary'}
+                            onClick={() => activarCamp(c.id)}
+                            disabled={!authOK}
+                          >
+                            {c.activa ? 'Activa' : 'Activar'}
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </Card.Body>
@@ -437,6 +546,47 @@ export default function Admin() {
           </Tab>
         </Tabs>
       </Container>
+      <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Editar campaÃ±a</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form className="row g-2">
+            <div className="col-12">
+              <Form.Label>Nombre</Form.Label>
+              <Form.Control value={editCamp?.nombre || ''} onChange={e => setEditCamp(s => ({ ...s, nombre: e.target.value }))} />
+            </div>
+            <div className="col-md-6">
+              <Form.Label>Inicia</Form.Label>
+              <Form.Control type="date" value={editCamp?.inicia || ''} onChange={e => setEditCamp(s => ({ ...s, inicia: e.target.value }))} />
+            </div>
+            <div className="col-md-6">
+              <Form.Label>Termina</Form.Label>
+              <Form.Control type="date" value={editCamp?.termina || ''} onChange={e => setEditCamp(s => ({ ...s, termina: e.target.value }))} />
+            </div>
+            <div className="col-md-4">
+              <Form.Label>Cat objetivo</Form.Label>
+              <Form.Control value={editCamp?.categoria_objetivo_cod || ''} onChange={e => setEditCamp(s => ({ ...s, categoria_objetivo_cod: e.target.value }))} />
+            </div>
+            <div className="col-md-4">
+              <Form.Label>Tipo objetivo</Form.Label>
+              <Form.Control value={editCamp?.tipo_objetivo_cod || ''} onChange={e => setEditCamp(s => ({ ...s, tipo_objetivo_cod: e.target.value }))} />
+            </div>
+            <div className="col-md-4">
+              <Form.Label>Clasif objetivo</Form.Label>
+              <Form.Control value={editCamp?.clasif_objetivo_cod || ''} onChange={e => setEditCamp(s => ({ ...s, clasif_objetivo_cod: e.target.value }))} />
+            </div>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowEditModal(false)}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={guardarEdicionCampania} disabled={!authOK}>
+            Guardar
+          </Button>
+        </Modal.Footer>
+      </Modal>
       <IdentityModal
         show={showIdentityModal}
         initialEmail={user?.email || ''}

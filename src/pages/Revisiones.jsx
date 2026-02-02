@@ -45,8 +45,8 @@ import {
   archivarActualizaciones, undoActualizacion, revertirActualizacion,
   // TXT
   exportTxtCategoria, exportTxtTipo, exportTxtClasif, exportSummaryTxt, fetchAdminBlobByUrl,
-  updateUnknownSku, confirmUnknownSku,
-  updateUnknown, confirmUnknown, rejectUnknown, mergeUnknown,
+  updateUnknownSku,
+  updateUnknown, rejectUnknown, moverEtapa,
 } from '../services/adminApi'
 
 // ===== Helpers =====
@@ -113,6 +113,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   const [confirmItems, setConfirmItems] = useState([])
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [confirmError, setConfirmError] = useState('')
+  const [confirmTargets, setConfirmTargets] = useState({})
   const [consolidateItems, setConsolidateItems] = useState([])
   const [consolidateLoading, setConsolidateLoading] = useState(false)
   const [consolidateError, setConsolidateError] = useState('')
@@ -220,6 +221,17 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   }, [activeTab, campaniaId, authOK])
 
   useEffect(() => {
+    if (!confirmItems.length) return
+    setConfirmTargets((prev) => {
+      const next = { ...prev }
+      confirmItems.forEach((item) => {
+        if (next[item.sku] === undefined) next[item.sku] = 'consolidate'
+      })
+      return next
+    })
+  }, [confirmItems])
+
+  useEffect(() => {
     if (activeTab !== 'consolidate') return
     loadConsolidacion()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -260,6 +272,10 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       const next = { ...prev }
       orderedEvaluarItems.forEach((item) => {
         if (next[item.sku]) return
+        if (item?.stage) {
+          next[item.sku] = item.stage
+          return
+        }
         const skuType = String(item?.skuType || '').toUpperCase()
         if (skuType) {
           next[item.sku] = skuType === 'UNKNOWN' ? 'unknown' : (getChangeCountForItem(item) === 0 ? 'confirm' : 'evaluate')
@@ -271,7 +287,8 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           return
         }
         const changes = getChangeCountForItem(item)
-        next[item.sku] = changes === 0 ? 'confirm' : 'evaluate'
+        const hasDif = hasPropuestaDif(item)
+        next[item.sku] = (changes === 0 && !hasDif) ? 'confirm' : 'evaluate'
       })
       return next
     })
@@ -293,7 +310,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       const next = { ...prev }
       orderedEvaluarItems.forEach((item) => {
         if (next[item.sku] !== 'evaluate') return
-        if (getChangeCountForItem(item) === 0) next[item.sku] = 'confirm'
+        if (getChangeCountForItem(item) === 0 && !hasPropuestaDif(item)) next[item.sku] = 'confirm'
       })
       return next
     })
@@ -442,6 +459,15 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     }, 0)
   }
 
+  function hasPropuestaDif(item) {
+    if (!item?.maestro) return false
+    return (item?.propuestas || []).some((p) => (
+      String(p?.categoria_cod || '') !== String(item?.maestro?.categoria_cod || '') ||
+      String(p?.tipo_cod || '') !== String(item?.maestro?.tipo_cod || '') ||
+      String(p?.clasif_cod || '') !== String(item?.maestro?.clasif_cod || '')
+    ))
+  }
+
   function isUnknownReady(sku) {
     const edits = unknownEdits[sku] || {}
     return (
@@ -475,10 +501,12 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   async function onMoveUnknownToConfirm(item) {
     if (!item?.sku) return
     if (!isUnknownReady(item.sku)) return
+    if (String(item?.unknownStatus || '').toUpperCase() === 'REJECTED') return
     const unknownId = resolveUnknownId(item)
     const payload = {
-      ...(unknownId ? { unknownId } : { sku: item.sku, campaniaId: Number(campaniaId) }),
+      sku: item.sku,
       campaniaId: Number(campaniaId),
+      ...(unknownId ? { unknownId } : {}),
       categoria_cod: unknownEdits[item.sku]?.categoria_cod || '',
       tipo_cod: unknownEdits[item.sku]?.tipo_cod || '',
       clasif_cod: unknownEdits[item.sku]?.clasif_cod || '',
@@ -487,15 +515,18 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     try {
       if (unknownId) {
         await updateUnknown(payload)
-        await confirmUnknown({ unknownId, campaniaId: Number(campaniaId), updatedBy: 'admin@local' })
       } else {
         await updateUnknownSku(item.sku, payload)
-        await confirmUnknownSku(item.sku, {
-          campaniaId: Number(campaniaId),
-          updatedBy: 'admin@local',
-        })
       }
+      await moverEtapa({
+        campaniaId: Number(campaniaId),
+        sku: item.sku,
+        stage: 'confirm',
+        updatedBy: 'admin@local',
+      })
       await Promise.all([cargar(), loadConfirmaciones()])
+      setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
+      setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
       setToast({
         show: true,
         variant: 'success',
@@ -512,19 +543,38 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
 
   async function onRejectUnknown(item) {
     if (!item?.sku) return
-    const reason = window.prompt('Motivo de rechazo (opcional):')
-    if (reason === null) return
     const unknownId = resolveUnknownId(item)
+    if (!unknownId) {
+      setToast({ show: true, variant: 'warning', message: 'Unknown ID no disponible para rechazar.' })
+      return
+    }
+    const isRejected = String(item?.unknownStatus || '').toUpperCase() === 'REJECTED'
     const payload = {
-      ...(unknownId ? { unknownId } : { sku: item.sku, campaniaId: Number(campaniaId) }),
+      ...(unknownId ? { unknownId } : {}),
       campaniaId: Number(campaniaId),
-      reason: reason || '',
+      reason: '',
       updatedBy: 'admin@local',
     }
     try {
-      await rejectUnknown(payload)
+      if (isRejected) {
+        await updateUnknown({
+          sku: item.sku,
+          campaniaId: Number(campaniaId),
+          categoria_cod: unknownEdits[item.sku]?.categoria_cod || '',
+          tipo_cod: unknownEdits[item.sku]?.tipo_cod || '',
+          clasif_cod: unknownEdits[item.sku]?.clasif_cod || '',
+          updatedBy: 'admin@local',
+        })
+      } else {
+        await rejectUnknown(payload)
+      }
       await Promise.all([cargar(), loadConfirmaciones()])
-      setToast({ show: true, variant: 'success', message: `SKU ${item.sku} rechazado.` })
+      setActiveTab('confirm')
+      setToast({
+        show: true,
+        variant: 'success',
+        message: isRejected ? `SKU ${item.sku} reactivado.` : `SKU ${item.sku} rechazado.`,
+      })
     } catch (e) {
       setToast({
         show: true,
@@ -534,45 +584,44 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     }
   }
 
-  async function onMergeUnknown(item) {
-    if (!item?.sku) return
-    const targetSku = window.prompt('SKU destino para merge:')
-    if (!targetSku) return
-    const unknownId = resolveUnknownId(item)
-    const payload = {
-      ...(unknownId ? { unknownId } : { sku: item.sku, campaniaId: Number(campaniaId) }),
-      campaniaId: Number(campaniaId),
-      targetSku: String(targetSku).trim().toUpperCase(),
-      updatedBy: 'admin@local',
-    }
-    try {
-      await mergeUnknown(payload)
-      await Promise.all([cargar(), loadConfirmaciones()])
-      setToast({ show: true, variant: 'success', message: `SKU ${item.sku} mergeado.` })
-    } catch (e) {
-      setToast({
-        show: true,
-        variant: 'danger',
-        message: e?.message || 'No se pudo mergear el SKU.'
-      })
-    }
-  }
-
   function onToggleConfirmFlag(sku, value) {
     setConfirmFlags((prev) => ({ ...prev, [sku]: value }))
   }
 
-  function onApplyConfirmation() {
-    setStageBySku((prev) => {
-      const next = { ...prev }
-      confirmQueue.forEach((item) => {
-        const shouldConfirm = confirmFlags[item.sku] !== false
-        next[item.sku] = shouldConfirm ? 'consolidate' : 'evaluate'
-      })
-      return next
+  async function onApplyConfirmation() {
+    const updates = (confirmItems || []).map((item) => {
+      const target = confirmTargets[item.sku] || 'consolidate'
+      const isUnknown = String(item?.skuType || '').toUpperCase() === 'UNKNOWN'
+      const stage = target === 'consolidate' ? 'consolidate' : (isUnknown ? 'unknown' : 'evaluate')
+      return { sku: item.sku, stage }
     })
-    setActiveTab('consolidate')
-    loadConsolidacion()
+
+    try {
+      await Promise.all(
+        updates.map((entry) =>
+          moverEtapa({
+            campaniaId: Number(campaniaId),
+            sku: entry.sku,
+            stage: entry.stage,
+            updatedBy: 'admin@local',
+          })
+        )
+      )
+      setStageBySku((prev) => {
+        const next = { ...prev }
+        updates.forEach((entry) => {
+          next[entry.sku] = entry.stage
+        })
+        return next
+      })
+      await Promise.all([loadConfirmaciones(), loadConsolidacion(), cargar()])
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo actualizar la etapa en el servidor.',
+      })
+    }
   }
 
   function buildSummary() {
@@ -704,6 +753,36 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
         decidedBy: 'admin@local',
         aplicarAhora: false
       })
+      setItems((prev) =>
+        (prev || []).map((item) => {
+          if (item.sku !== sku) return item
+          const nextPropuestas = (item.propuestas || []).map((p) => {
+            if (p?.[field] === code) {
+              return {
+                ...p,
+                decision: {
+                  estado: 'pendiente',
+                  id: p.decision?.id || null,
+                  new_categoria_cod: field === 'categoria_cod' ? code : '',
+                  new_tipo_cod: field === 'tipo_cod' ? code : '',
+                  new_clasif_cod: field === 'clasif_cod' ? code : '',
+                },
+              }
+            }
+            if (p?.decision && p?.decision?.estado !== 'aplicada') {
+              const hasSameField =
+                (field === 'categoria_cod' && p.decision?.new_categoria_cod) ||
+                (field === 'tipo_cod' && p.decision?.new_tipo_cod) ||
+                (field === 'clasif_cod' && p.decision?.new_clasif_cod)
+              if (hasSameField) {
+                return { ...p, decision: null }
+              }
+            }
+            return p
+          })
+          return { ...item, propuestas: nextPropuestas }
+        })
+      )
       await cargar()
       setLastActionSku(sku)
       setCurrentSku(sku)
@@ -720,37 +799,14 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       })
     }
   }
-  async function onRechazar(sku, prop) {
-    try {
-      await decidirRevision({
-        campaniaId: Number(campaniaId), sku,
-        propuesta: prop, decision: 'rechazar',
-        decidedBy: 'admin@local'
-      })
-      await cargar()
-      setLastActionSku(sku)
-      setCurrentSku(sku)
-      setToast({
-        show: true,
-        variant: 'success',
-        message: `Propuesta rechazada para ${sku}.`
-      })
-    } catch (e) {
-      setToast({
-        show: true,
-        variant: 'danger',
-        message: e?.message || 'No se pudo rechazar la propuesta.'
-      })
-    }
-  }
   async function onUndoAttributeDecision(decisionId, sku) {
     if (!decisionId) return
     try {
-      await undoActualizacion(decisionId)
+      await archivarActualizaciones([decisionId], true, 'undo-attr')
       if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
       setUiMessage({
         variant: 'info',
-        text: 'Decisión deshecha. Quedó como pendiente nuevamente.'
+        text: 'Decisión deshecha. Se restauró el maestro.'
       })
       messageTimeoutRef.current = setTimeout(() => {
         setUiMessage(null)
@@ -951,7 +1007,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     if (!campaniaId) return
     try {
       setExportLoading(true)
-      await descargarTxtPorScope('applied')
+      await descargarTxtPorScope('pending')
       setToast({
         show: true,
         variant: 'success',
@@ -1220,12 +1276,12 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
             const it = currentEvaluarItem
             const borde = it.hayConsenso ? 'border-success' : 'border-warning'
             const bordeWidth = 'border-start border-4'
-            const acceptedCategoriaCode = getAcceptedAttributeCode(it.propuestas, 'categoria_cod')
-            const acceptedTipoCode = getAcceptedAttributeCode(it.propuestas, 'tipo_cod')
-            const acceptedClasifCode = getAcceptedAttributeCode(it.propuestas, 'clasif_cod')
-            const acceptedCategoriaDecision = getAcceptedAttributeDecision(it.propuestas, 'categoria_cod')
-            const acceptedTipoDecision = getAcceptedAttributeDecision(it.propuestas, 'tipo_cod')
-            const acceptedClasifDecision = getAcceptedAttributeDecision(it.propuestas, 'clasif_cod')
+            const acceptedCategoriaDecision = it?.decisionsByField?.categoria_cod || getAcceptedAttributeDecision(it.propuestas, 'categoria_cod')
+            const acceptedCategoriaCode = acceptedCategoriaDecision?.code || getAcceptedAttributeCode(it.propuestas, 'categoria_cod')
+            const acceptedTipoDecision = it?.decisionsByField?.tipo_cod || getAcceptedAttributeDecision(it.propuestas, 'tipo_cod')
+            const acceptedTipoCode = acceptedTipoDecision?.code || getAcceptedAttributeCode(it.propuestas, 'tipo_cod')
+            const acceptedClasifDecision = it?.decisionsByField?.clasif_cod || getAcceptedAttributeDecision(it.propuestas, 'clasif_cod')
+            const acceptedClasifCode = acceptedClasifDecision?.code || getAcceptedAttributeCode(it.propuestas, 'clasif_cod')
             return (
               <Card
                 key={it.sku}
@@ -1317,7 +1373,8 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                           : field === 'tipo_cod'
                             ? it.maestro?.tipo_cod
                             : it.maestro?.clasif_cod
-                        const acceptedCode = getAcceptedAttributeCode(it.propuestas, field)
+                        const acceptedDecision = it?.decisionsByField?.[field] || getAcceptedAttributeDecision(it.propuestas, field)
+                        const acceptedCode = acceptedDecision?.code || getAcceptedAttributeCode(it.propuestas, field)
                         const isLocked = Boolean(acceptedCode)
                         const meta = buildAttributeOptions(it.propuestas, field)
                         const filteredOptions = meta.options.filter((opt) => String(opt.code) !== String(maestroCode))
@@ -1388,20 +1445,12 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                         </div>
                                         <div className="d-flex align-items-center gap-2">
                                           <Button
-                                            variant="outline-danger"
-                                            size="sm"
-                                            onClick={() => onDecideAttribute(it.sku, field, opt.code, 'rechazar')}
-                                            disabled={!authOK}
-                                          >
-                                            Rechazar
-                                          </Button>
-                                          <Button
-                                            variant="success"
+                                            variant={isAccepted ? 'success' : 'outline-success'}
                                             size="sm"
                                             onClick={() => onDecideAttribute(it.sku, field, opt.code, 'aceptar')}
-                                            disabled={!authOK}
+                                            disabled={!authOK || isAccepted}
                                           >
-                                            Aceptar
+                                            {isAccepted ? 'Seleccionada' : 'Aceptar'}
                                           </Button>
                                         </div>
                                       </div>
@@ -1449,12 +1498,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                                             </Button>
                                           )}
                                         </>
-                                      ) : (
-                                        <Button variant="outline-danger" size="sm"
-                                                onClick={()=>onRechazar(it.sku, p)} disabled={!authOK}>
-                                          Rechazar
-                                        </Button>
-                                      )}
+                                      ) : null}
                                     </div>
                                   </div>
                                 </Card.Body>
@@ -1496,6 +1540,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                       const edits = unknownEdits[item.sku] || {}
                       const ready = isUnknownReady(item.sku)
                       const unknownId = resolveUnknownId(item)
+                      const isRejected = String(item?.unknownStatus || '').toUpperCase() === 'REJECTED'
                       const categoriaLabel = buildAttributeOptions(item?.propuestas, 'categoria_cod').options[0]
                       const tipoLabel = buildAttributeOptions(item?.propuestas, 'tipo_cod').options[0]
                       const clasifLabel = buildAttributeOptions(item?.propuestas, 'clasif_cod').options[0]
@@ -1507,6 +1552,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                               size="sm"
                               value={edits.categoria_cod || ''}
                               onChange={(e) => onUpdateUnknown(item.sku, 'categoria_cod', e.target.value)}
+                              disabled={isRejected}
                             >
                               <option value="">Seleccionar</option>
                               {(dic?.categorias || []).map((c) => (
@@ -1524,6 +1570,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                               size="sm"
                               value={edits.tipo_cod || ''}
                               onChange={(e) => onUpdateUnknown(item.sku, 'tipo_cod', e.target.value)}
+                              disabled={isRejected}
                             >
                               <option value="">Seleccionar</option>
                               {(dic?.tipos || []).map((t) => (
@@ -1541,6 +1588,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                               size="sm"
                               value={edits.clasif_cod || ''}
                               onChange={(e) => onUpdateUnknown(item.sku, 'clasif_cod', e.target.value)}
+                              disabled={isRejected}
                             >
                               <option value="">Seleccionar</option>
                               {(dic?.clasif || []).map((c) => (
@@ -1554,7 +1602,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                             )}
                           </td>
                           <td>
-                            {ready ? <Badge bg="success">Listo</Badge> : <Badge bg="secondary">Incompleto</Badge>}
+                            {isRejected
+                              ? <Badge bg="danger">Rechazado</Badge>
+                              : (ready ? <Badge bg="success">Listo</Badge> : <Badge bg="secondary">Incompleto</Badge>)}
                             {unknownId ? (
                               <div className="small text-muted mt-1">Unknown ID: {unknownId}</div>
                             ) : null}
@@ -1563,23 +1613,16 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                             <div className="d-flex flex-wrap justify-content-end gap-2">
                               <Button
                                 size="sm"
-                                variant="outline-danger"
+                                variant={isRejected ? "outline-secondary" : "outline-danger"}
                                 onClick={() => onRejectUnknown(item)}
                               >
-                                Rechazar
+                                {isRejected ? "Deshacer rechazo" : "Rechazar"}
                               </Button>
                               <Button
                                 size="sm"
-                                variant="outline-secondary"
-                                onClick={() => onMergeUnknown(item)}
-                              >
-                                Merge
-                              </Button>
-                            <Button
-                              size="sm"
-                              variant="success"
-                              onClick={() => onMoveUnknownToConfirm(item)}
-                              disabled={!ready}
+                                variant="success"
+                                onClick={() => onMoveUnknownToConfirm(item)}
+                              disabled={!ready || isRejected}
                             >
                               Enviar a Confirmación
                             </Button>
@@ -1612,7 +1655,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 </div>
               </div>
               <Button variant="primary" onClick={onApplyConfirmation} disabled={confirmLoading}>
-                Ir a Consolidación
+                Mover seleccionados
               </Button>
             </Card.Header>
             <Card.Body>
@@ -1624,6 +1667,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                   <thead>
                     <tr>
                       <th>SKU</th>
+                      <th>Tipo</th>
                       <th>Cambios</th>
                       <th>Verificados</th>
                       <th>Estado</th>
@@ -1634,7 +1678,15 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                       .slice()
                       .sort((a, b) => Object.keys(b?.changes || {}).length - Object.keys(a?.changes || {}).length)
                       .map((item) => {
-                      const changesEntries = Object.entries(item?.changes || {})
+                      const isUnknown = String(item?.skuType || '').toUpperCase() === 'UNKNOWN' || Boolean(item?.unknown)
+                      let changesEntries = Object.entries(item?.changes || {})
+                      if (!changesEntries.length && item?.unknown) {
+                        changesEntries = [
+                          ['categoria_cod', item.unknown?.categoria_cod || ''],
+                          ['tipo_cod', item.unknown?.tipo_cod || ''],
+                          ['clasif_cod', item.unknown?.clasif_cod || ''],
+                        ]
+                      }
                       const verifiedEntries = Object.entries(item?.verified || {})
                       return (
                         <tr key={item.sku}>
@@ -1681,12 +1733,26 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                               <Badge bg="secondary">Pendiente</Badge>
                             )}
                           </td>
+                          <td>
+                            <Form.Check
+                              type="switch"
+                              id={`confirm-target-${item.sku}`}
+                              label={(confirmTargets[item.sku] || 'consolidate') === 'consolidate' ? 'Consolidar' : 'Evaluar'}
+                              checked={(confirmTargets[item.sku] || 'consolidate') === 'consolidate'}
+                              onChange={(e) =>
+                                setConfirmTargets((prev) => ({
+                                  ...prev,
+                                  [item.sku]: e.target.checked ? 'consolidate' : 'evaluate',
+                                }))
+                              }
+                            />
+                          </td>
                         </tr>
                       )
                     })}
                     {!confirmItems.length && (
                       <tr>
-                        <td colSpan={4} className="text-center text-muted">
+                        <td colSpan={6} className="text-center text-muted">
                           No hay SKUs en confirmación.
                         </td>
                       </tr>
@@ -1735,6 +1801,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                   <thead>
                     <tr>
                       <th>SKU</th>
+                      <th>Tipo</th>
                       <th>Cambios</th>
                     </tr>
                   </thead>
@@ -1744,6 +1811,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                       .sort((a, b) => Object.keys(b?.changes || {}).length - Object.keys(a?.changes || {}).length)
                       .map((item) => {
                       const changeEntries = Object.entries(item?.changes || {})
+                      const isUnknown = String(item?.skuType || '').toUpperCase() === 'UNKNOWN'
                       return (
                         <tr key={item.sku}>
                           <td>{item.sku}</td>
@@ -1767,7 +1835,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                     })}
                     {!consolidateItems.length && (
                       <tr>
-                        <td colSpan={2} className="text-center text-muted">
+                        <td colSpan={3} className="text-center text-muted">
                           No hay SKUs en consolidación.
                         </td>
                       </tr>
@@ -1822,3 +1890,8 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     </>
   )
 }
+
+
+
+
+

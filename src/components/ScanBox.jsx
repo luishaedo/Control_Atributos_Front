@@ -3,7 +3,7 @@ import { Card, Form, Button, Row, Col, Table, Alert } from "react-bootstrap";
 import StatusBadge from "./StatusBadge.jsx";
 import SuggestionForm from "./SuggestionForm.jsx";
 import { cleanSku, pad2 } from "../utils/sku.js";
-import { getDictionaries, getMasterBySku, saveScan } from "../services/api.js";
+import { getDictionaries, getMasterBySku, getCampaignMasterBySku, saveScan } from "../services/api.js";
 import { getNombre } from "../utils/texto.js";
 import { hasValidCode } from "../utils/revisionesHelpers.jsx";
 
@@ -55,7 +55,9 @@ export default function ScanBox({ user, campania }) {
 
     let maestro = null;
     try {
-      maestro = await getMasterBySku(limpio);
+      maestro = campania?.id
+        ? await getCampaignMasterBySku(campania.id, limpio)
+        : await getMasterBySku(limpio);
     } catch (e) {
       setError(e?.message || "No se pudo consultar el maestro. Reintentar.");
       setResultado(null);
