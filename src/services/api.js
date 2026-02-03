@@ -71,8 +71,8 @@ export async function getMasterBySku(sku) {
 export async function getCampaignMasterBySku(campaniaId, sku) {
   const limpio = String(sku || "").trim().toUpperCase();
   const id = Number(campaniaId || 0);
-  if (!id) throw new Error("CampaÃ±a invÃ¡lida");
-  if (!limpio) throw new Error("SKU vacÃ­o");
+  if (!id) throw new Error("Campaña inválida");
+  if (!limpio) throw new Error("SKU vacío");
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), MASTER_TIMEOUT_MS);
   let res;
@@ -83,9 +83,9 @@ export async function getCampaignMasterBySku(campaniaId, sku) {
     });
   } catch (error) {
     if (error?.name === "AbortError") {
-      throw new Error("No se pudo consultar el maestro de la campaÃ±a. Reintentar. (timeout)");
+      throw new Error("No se pudo consultar el maestro de la campaña. Reintentar. (timeout)");
     }
-    throw new Error("No se pudo consultar el maestro de la campaÃ±a. Reintentar.");
+    throw new Error("No se pudo consultar el maestro de la campaña. Reintentar.");
   } finally {
     clearTimeout(timeoutId);
   }
@@ -95,7 +95,7 @@ export async function getCampaignMasterBySku(campaniaId, sku) {
   const body = isJSON ? await res.json().catch(() => null) : await res.text().catch(() => "");
   if (!res.ok) {
     const msg = (isJSON && (body?.error || body?.message)) ? (body.error || body.message) : String(body || res.statusText);
-    throw new Error(`No se pudo consultar el maestro de la campaÃ±a. Reintentar. (${msg})`);
+    throw new Error(`No se pudo consultar el maestro de la campaña. Reintentar. (${msg})`);
   }
   return isJSON ? body : {};
 }

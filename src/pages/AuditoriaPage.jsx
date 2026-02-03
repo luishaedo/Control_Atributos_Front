@@ -1,9 +1,10 @@
-import { useNavigate } from 'react-router-dom'
+﻿import { useNavigate } from 'react-router-dom'
 import React, { useEffect, useMemo, useState } from 'react'
+import { Modal } from 'react-bootstrap'
 import DiscrepanciasTabla from '../components/DiscrepanciasTabla'
 import DiscrepanciasSucursalesTabla from '../components/DiscrepanciasSucursalesTabla'
 import { getCampaigns } from '../services/api'
-import { getDiscrepancias, getDiscrepanciasSucursales, exportDiscrepanciasCSV } from '../services/adminApi'
+import { getDiscrepancias, getDiscrepanciasSucursales, exportDiscrepanciasCSV, getAuditoriaResumen } from '../services/adminApi'
 
 export default function AuditoriaPage() {
   const [campaniaId, setCampaniaId] = useState('')
@@ -15,7 +16,9 @@ export default function AuditoriaPage() {
   const [loading, setLoading] = useState(false)
   const [dataM, setDataM] = useState([])
   const [dataS, setDataS] = useState([])
+  const [summary, setSummary] = useState(null)
   const [error, setError] = useState('')
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   const navigate = useNavigate()
 
@@ -38,12 +41,14 @@ export default function AuditoriaPage() {
     if (!campaniaId) { setError('Ingresá un ID de campaña o activá una campaña.'); return }
     setLoading(true); setError('')
     try {
-      const [m, s] = await Promise.all([
+      const [m, s, resumen] = await Promise.all([
         getDiscrepancias(Number(campaniaId), { sku, minVotos }),
         getDiscrepanciasSucursales(Number(campaniaId), { sku, minSucursales }),
+        getAuditoriaResumen(Number(campaniaId)),
       ])
       setDataM(m.items || [])
       setDataS(s.items || [])
+      setSummary(resumen || null)
       if (!(m.items?.length || s.items?.length)) {
         setError('No hay datos para esta campaña. Escaneá algunos SKUs o revisá los filtros.')
       }
@@ -64,15 +69,55 @@ export default function AuditoriaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaniaId])
 
-  const kpis = useMemo(() => ({
-    discrepancias: (dataM||[]).filter(it => {
+  const kpis = useMemo(() => {
+    const discrepancias = (dataM || []).filter(it => {
       const m = it.maestro; const p = it.topPropuesta
-      return p && (!m || m.categoria_cod!==p.categoria_cod || m.tipo_cod!==p.tipo_cod || m.clasif_cod!==p.clasif_cod)
-    }).length,
-    totalM: dataM?.length || 0,
-    conflictoSuc: (dataS||[]).filter(x => x.conflicto).length,
-    totalS: dataS?.length || 0,
-  }), [dataM, dataS])
+      return p && (!m || m.categoria_cod !== p.categoria_cod || m.tipo_cod !== p.tipo_cod || m.clasif_cod !== p.clasif_cod)
+    }).length
+    const conflictoSuc = (dataS || []).filter(x => x.conflicto).length
+    return {
+      skuEscaneados: summary?.kpis?.skuEscaneados ?? 0,
+      skuVerificados: summary?.kpis?.skuVerificados ?? 0,
+      skuConSugerencias: summary?.kpis?.skuConSugerencias ?? 0,
+      atributosAceptados: summary?.kpis?.atributosAceptados ?? 0,
+      discrepancias,
+      totalM: dataM?.length || 0,
+      conflictoSuc,
+      totalS: dataS?.length || 0,
+    }
+  }, [dataM, dataS, summary])
+
+  const topScans = summary?.top?.escaneos || []
+  const topSuggestions = summary?.top?.sugerencias || []
+  const topAccepted = summary?.top?.aceptadas || []
+  const topRates = summary?.top?.tasaAceptacion || []
+
+  function renderBarList(title, items, valueKey = 'count', valueLabel) {
+    const max = Math.max(1, ...items.map(i => i[valueKey] || 0))
+    return (
+      <div className="card border-0 shadow-sm h-100">
+        <div className="card-body">
+          <div className="fw-semibold mb-2">{title}</div>
+          {!items.length && <div className="text-muted small">Sin datos.</div>}
+          {items.map((item) => {
+            const value = item[valueKey] || 0
+            const pct = Math.round((value / max) * 100)
+            return (
+              <div className="mb-2" key={item.user}>
+                <div className="d-flex justify-content-between small">
+                  <span>{item.user}</span>
+                  <span>{valueLabel ? valueLabel(item) : value}</span>
+                </div>
+                <div className="progress" style={{ height: 6 }}>
+                  <div className="progress-bar" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container py-4">
@@ -87,6 +132,9 @@ export default function AuditoriaPage() {
           </p>
         </div>
         <div className="d-flex align-items-center gap-2">
+          <button className="btn btn-outline-secondary" onClick={() => setDetailsOpen(true)}>
+            Ver detalles
+          </button>
           <button className="btn btn-primary" disabled={loading} onClick={fetchData}>
             {loading ? 'Cargando…' : 'Actualizar'}
           </button>
@@ -134,55 +182,108 @@ export default function AuditoriaPage() {
       <div className="row g-3 mb-3">
         <div className="col-sm-6 col-lg-3">
           <div className="card shadow-sm"><div className="card-body">
-            <div className="text-muted small">Discrepancias (vs Maestro)</div>
+            <div className="text-muted small">SKUs escaneados</div>
+            <div className="fs-4">{kpis.skuEscaneados}</div>
+          </div></div>
+        </div>
+        <div className="col-sm-6 col-lg-3">
+          <div className="card shadow-sm"><div className="card-body">
+            <div className="text-muted small">SKUs verificados</div>
+            <div className="fs-4">{kpis.skuVerificados}</div>
+          </div></div>
+        </div>
+        <div className="col-sm-6 col-lg-3">
+          <div className="card shadow-sm"><div className="card-body">
+            <div className="text-muted small">SKUs con sugerencias</div>
+            <div className="fs-4">{kpis.skuConSugerencias}</div>
+          </div></div>
+        </div>
+        <div className="col-sm-6 col-lg-3">
+          <div className="card shadow-sm"><div className="card-body">
+            <div className="text-muted small">Atributos aceptados</div>
+            <div className="fs-4">{kpis.atributosAceptados}</div>
+          </div></div>
+        </div>
+        <div className="col-sm-6 col-lg-3">
+          <div className="card shadow-sm"><div className="card-body">
+            <div className="text-muted small">Discrepancias vs Maestro</div>
             <div className="fs-4">{kpis.discrepancias} <span className="text-muted fs-6">/ {kpis.totalM}</span></div>
           </div></div>
         </div>
         <div className="col-sm-6 col-lg-3">
           <div className="card shadow-sm"><div className="card-body">
-            <div className="text-muted small">SKUs con conflicto entre sucursales</div>
+            <div className="text-muted small">Conflictos entre sucursales</div>
             <div className="fs-4">{kpis.conflictoSuc} <span className="text-muted fs-6">/ {kpis.totalS}</span></div>
           </div></div>
         </div>
       </div>
 
-      <ul className="nav nav-tabs mb-3">
-        <li className="nav-item">
-          <button className={`nav-link ${tab==='maestro'? 'active': ''}`} onClick={()=>setTab('maestro')}>Vs Maestro</button>
-        </li>
-        <li className="nav-item">
-          <button className={`nav-link ${tab==='sucursales'? 'active': ''}`} onClick={()=>setTab('sucursales')}>Entre Sucursales</button>
-        </li>
-      </ul>
+      <div className="row g-3 mb-3">
+        <div className="col-lg-6">
+          {renderBarList('Usuarios con más escaneos', topScans)}
+        </div>
+        <div className="col-lg-6">
+          {renderBarList('Usuarios con más sugerencias', topSuggestions)}
+        </div>
+      </div>
+      <div className="row g-3 mb-3">
+        <div className="col-lg-6">
+          {renderBarList('Sugerencias aceptadas (por usuario)', topAccepted)}
+        </div>
+        <div className="col-lg-6">
+          {renderBarList(
+            'Índice de aceptación',
+            topRates,
+            'rate',
+            (item) => `${Math.round((item.rate || 0) * 100)}% (${item.count}/${item.base})`
+          )}
+        </div>
+      </div>
 
-      {tab==='maestro'
-        ? (
-          <DiscrepanciasTabla
-            data={dataM}
-            loading={loading}
-            onExportCSV={async () => {
-              const blob = await exportDiscrepanciasCSV(Number(campaniaId))
-              const url = URL.createObjectURL(blob)
-              const link = document.createElement('a')
-              link.href = url
-              link.download = `discrepancias_campania_${campaniaId}.csv`
-              document.body.appendChild(link)
-              link.click()
-              link.remove()
-              URL.revokeObjectURL(url)
-            }}
-            exportLabel="Exportar discrepancias vs maestro (CSV)"
-          />
-        )
-        : (
-          <>
-            <div className="alert alert-info py-2">
-              La exportación CSV sólo está disponible en la pestaña “Vs Maestro”.
-            </div>
-            <DiscrepanciasSucursalesTabla data={dataS} loading={loading} />
-          </>
-        )
-      }
+      <Modal show={detailsOpen} onHide={() => setDetailsOpen(false)} size="xl" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Detalles de auditoría</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <ul className="nav nav-tabs mb-3">
+            <li className="nav-item">
+              <button className={`nav-link ${tab === 'maestro' ? 'active' : ''}`} onClick={() => setTab('maestro')}>Vs Maestro</button>
+            </li>
+            <li className="nav-item">
+              <button className={`nav-link ${tab === 'sucursales' ? 'active' : ''}`} onClick={() => setTab('sucursales')}>Entre Sucursales</button>
+            </li>
+          </ul>
+
+          {tab === 'maestro'
+            ? (
+              <DiscrepanciasTabla
+                data={dataM}
+                loading={loading}
+                onExportCSV={async () => {
+                  const blob = await exportDiscrepanciasCSV(Number(campaniaId))
+                  const url = URL.createObjectURL(blob)
+                  const link = document.createElement('a')
+                  link.href = url
+                  link.download = `discrepancias_campania_${campaniaId}.csv`
+                  document.body.appendChild(link)
+                  link.click()
+                  link.remove()
+                  URL.revokeObjectURL(url)
+                }}
+                exportLabel="Exportar discrepancias vs maestro (CSV)"
+              />
+            )
+            : (
+              <>
+                <div className="alert alert-info py-2">
+                  La exportación CSV sólo está disponible en la pestaña “Vs Maestro”.
+                </div>
+                <DiscrepanciasSucursalesTabla data={dataS} loading={loading} />
+              </>
+            )
+          }
+        </Modal.Body>
+      </Modal>
     </div>
   )
 }

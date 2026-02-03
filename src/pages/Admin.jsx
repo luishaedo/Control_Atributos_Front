@@ -203,7 +203,7 @@ export default function Admin() {
       setEditCamp(null)
       cargarCampanias()
     } catch (e) {
-      setError(e.message || 'No se pudo actualizar la campaÃ±a')
+      setError(e.message || 'No se pudo actualizar la campaña')
     }
   }
 
@@ -420,7 +420,7 @@ export default function Admin() {
                     <div className="text-muted small">Total: {maestroPreview.total}</div>
                     <Form.Control
                       size="sm"
-                      placeholder="Buscar SKU o descripciÃ³n"
+                      placeholder="Buscar SKU o descripción"
                       value={maestroQuery}
                       onChange={e => { setMaestroPage(1); setMaestroQuery(e.target.value) }}
                       style={{ maxWidth: 260 }}
@@ -548,7 +548,7 @@ export default function Admin() {
       </Container>
       <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Editar campaÃ±a</Modal.Title>
+          <Modal.Title>Editar campaña</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Form className="row g-2">

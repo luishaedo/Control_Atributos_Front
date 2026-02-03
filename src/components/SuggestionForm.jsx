@@ -1,4 +1,4 @@
-import React from 'react'
+﻿import React from 'react'
 import { Row, Col, Form } from 'react-bootstrap'
 import { getNombre } from '../utils/texto.js'
 
@@ -19,13 +19,12 @@ export default function SuggestionForm({ dic, estado, sugeridos, onChange, maest
           <option value="">— Seleccionar —</option>
           {opciones.map(o => (
             <option key={o.cod} value={o.cod}>
-              {o.cod} · {o.nombre}
+              {o.nombre}
             </option>
           ))}
         </Form.Select>
         <Form.Text muted>
-          Maestro: <strong>{maestro?.[name] || '—'}</strong>
-          {maestro?.[name] ? ` · ${getNombre(opciones, maestro?.[name])}` : ''}
+          Maestro: <strong>{getNombre(opciones, maestro?.[name]) || '—'}</strong>
         </Form.Text>
       </Form.Group>
     )

@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Card, Form, Button, Row, Col, Table, Alert } from "react-bootstrap";
+﻿import React, { useEffect, useRef, useState } from "react";
+import { Card, Form, Button, Row, Col, Alert } from "react-bootstrap";
 import StatusBadge from "./StatusBadge.jsx";
 import SuggestionForm from "./SuggestionForm.jsx";
 import { cleanSku, pad2 } from "../utils/sku.js";
@@ -11,7 +11,7 @@ export default function ScanBox({ user, campania }) {
   const [dic, setDic] = useState(null);
   const [skuRaw, setSkuRaw] = useState("");
   const [sku, setSku] = useState("");
-  const [resultado, setResultado] = useState(null); // { estado, maestro?, asumidos? }
+  const [resultado, setResultado] = useState(null); // { estado, maestro, asumidos }
   const [sugeridos, setSugeridos] = useState({});
   const [guardadoInfo, setGuardadoInfo] = useState(null);
   const [error, setError] = useState("");
@@ -132,19 +132,21 @@ export default function ScanBox({ user, campania }) {
     inputRef.current?.focus();
   }
 
-  function fila(nombre, maestroValor, asumidoValor, arr) {
-    const mNombre = maestroValor
-      ? `${pad2(maestroValor)} · ${getNombre(arr, maestroValor)}`
-      : "—";
-    const aNombre = asumidoValor
-      ? `${pad2(asumidoValor)} · ${getNombre(arr, asumidoValor)}`
-      : "—";
+  function atributoCard(nombre, maestroValor, asumidoValor, arr) {
+    const mNombre = maestroValor ? getNombre(arr, maestroValor) : "—";
+    const aNombre = asumidoValor ? getNombre(arr, asumidoValor) : "—";
+    const same =
+      maestroValor &&
+      asumidoValor &&
+      pad2(maestroValor) === pad2(asumidoValor);
     return (
-      <tr>
-        <td>{nombre}</td>
-        <td>{mNombre}</td>
-        <td>{aNombre}</td>
-      </tr>
+      <Card className={`border-0 shadow-sm ${same ? "bg-light" : "bg-white"} flex-fill`}>
+        <Card.Body className={`py-2 px-3 border-start border-3 ${same ? "border-success" : "border-warning"}`}>
+          <div className="text-muted small">{nombre}</div>
+          <div className="fw-semibold">{aNombre || "—"}</div>
+          <div className="small text-muted">Maestro: {mNombre || "—"}</div>
+        </Card.Body>
+      </Card>
     );
   }
 
@@ -223,28 +225,26 @@ export default function ScanBox({ user, campania }) {
               Resultado: <StatusBadge estado={resultado.estado} />
             </h6>
 
-            <Table size="sm" bordered className="mt-2">
-              <tbody>
-                {fila(
-                  "Categoría",
-                  resultado?.maestro?.categoria_cod,
-                  resultado?.asumidos?.categoria_cod,
-                  dic?.categorias || []
-                )}
-                {fila(
-                  "Tipo",
-                  resultado?.maestro?.tipo_cod,
-                  resultado?.asumidos?.tipo_cod,
-                  dic?.tipos || []
-                )}
-                {fila(
-                  "Clasificación",
-                  resultado?.maestro?.clasif_cod,
-                  resultado?.asumidos?.clasif_cod,
-                  dic?.clasif || []
-                )}
-              </tbody>
-            </Table>
+            <div className="d-flex flex-column flex-md-row gap-3 mt-2">
+              {atributoCard(
+                "Categoría",
+                resultado?.maestro?.categoria_cod,
+                resultado?.asumidos?.categoria_cod,
+                dic?.categorias || []
+              )}
+              {atributoCard(
+                "Tipo",
+                resultado?.maestro?.tipo_cod,
+                resultado?.asumidos?.tipo_cod,
+                dic?.tipos || []
+              )}
+              {atributoCard(
+                "Clasificación",
+                resultado?.maestro?.clasif_cod,
+                resultado?.asumidos?.clasif_cod,
+                dic?.clasif || []
+              )}
+            </div>
 
             <SuggestionForm
               dic={dic}

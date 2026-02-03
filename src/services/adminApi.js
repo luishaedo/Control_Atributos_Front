@@ -213,6 +213,10 @@ export function exportDiscrepanciasSucursalesCSV(campaniaId) {
   const id = assertHasCampaignId(campaniaId, "exportDiscrepanciasSucursalesCSV");
   return fetchAuthBlob(`/api/admin/export/discrepancias-sucursales.csv?${qsFrom({ campaniaId: id })}`);
 }
+export function getAuditoriaResumen(campaniaId) {
+  const id = assertHasCampaignId(campaniaId, "getAuditoriaResumen");
+  return fetchAuthJSON(`/api/admin/auditoria/resumen?${qsFrom({ campaniaId: id })}`);
+}
 // CSV globales que usa Admin.jsx
 export function exportMaestroCSV() {
   return fetchAuthBlob(`/api/admin/export/maestro.csv`);
