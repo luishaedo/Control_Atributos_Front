@@ -492,10 +492,25 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     return String(item.unknownId || item?.unknown?.id || '').trim()
   }
 
-  function onMarkReady(item) {
+  async function onMarkReady(item) {
     if (!item?.sku) return
-    setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
-    setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
+    try {
+      await moverEtapa({
+        campaniaId: Number(campaniaId),
+        sku: item.sku,
+        stage: 'confirm',
+        updatedBy: 'admin@local',
+      })
+      setStageBySku((prev) => ({ ...prev, [item.sku]: 'confirm' }))
+      setConfirmFlags((prev) => ({ ...prev, [item.sku]: true }))
+      await loadConfirmaciones()
+    } catch (e) {
+      setToast({
+        show: true,
+        variant: 'danger',
+        message: e?.message || 'No se pudo mover el SKU a confirmación.',
+      })
+    }
   }
 
   async function onMoveUnknownToConfirm(item) {
