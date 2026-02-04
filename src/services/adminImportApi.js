@@ -1,9 +1,4 @@
-const API_BASE = (import.meta.env?.VITE_API_URL?.replace(/\/$/, "")) || window.location.origin;
-
-function authHeader() {
-  const t = localStorage.getItem('cc_admin_token') || '';
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
+import { API_BASE } from "./apiBase.js";
 
 export async function uploadDiccionarios({ categorias, tipos, clasif } = {}) {
   if (!categorias && !tipos && !clasif) {
@@ -16,7 +11,7 @@ export async function uploadDiccionarios({ categorias, tipos, clasif } = {}) {
 
   const res = await fetch(`${API_BASE}/api/admin/diccionarios/import-file`, {
     method: 'POST',
-    headers: authHeader(),
+    credentials: 'include',
     body: fd,
   });
   const data = await res.json().catch(() => ({}));
@@ -33,7 +28,7 @@ export async function uploadMaestro({ maestro } = {}) {
 
   const res = await fetch(`${API_BASE}/api/admin/maestro/import-file`, {
     method: 'POST',
-    headers: authHeader(),
+    credentials: 'include',
     body: fd,
   });
   const data = await res.json().catch(() => ({}));

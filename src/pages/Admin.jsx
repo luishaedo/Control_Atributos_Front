@@ -6,7 +6,7 @@ import IdentityModal from '../components/IdentityModal.jsx'
 import { getCampaigns, setActiveCampaign, getDictionaries, getMaestroList } from '../services/api.js'
 import Revisiones from './Revisiones.jsx'
 import {
-  adminPing, adminSetToken, adminGetToken,
+  adminPing, adminLogin,
   crearCampania, actualizarCampania,
   exportMaestroCSV, exportCategoriasCSV, exportTiposCSV, exportClasifCSV
 } from '../services/adminApi.js'
@@ -28,7 +28,7 @@ function setUserLS(u) {
 export default function Admin() {
   const [user, setUser] = useState(getUserLS() || { email: 'admin@local', sucursal: 'Admin' })
 
-  const [token, setToken] = useState(adminGetToken())
+  const [token, setToken] = useState('')
   const [authOK, setAuthOK] = useState(false)
   const [error, setError] = useState(null)
   const [filesDic, setFilesDic] = useState({ categorias: null, tipos: null, clasif: null })
@@ -54,10 +54,7 @@ export default function Admin() {
   const [editCamp, setEditCamp] = useState(null)
 
   useEffect(() => {
-    if (token) {
-      adminSetToken(token)
-      adminPing().then(() => setAuthOK(true)).catch(() => setAuthOK(false))
-    }
+    adminPing().then(() => setAuthOK(true)).catch(() => setAuthOK(false))
     cargarCampanias()
     cargarPreview()
   }, [])
@@ -142,7 +139,7 @@ export default function Admin() {
     e.preventDefault()
     try {
       setError(null)
-      adminSetToken(token)
+      await adminLogin(token)
       await adminPing()
       setAuthOK(true)
     } catch {
@@ -246,7 +243,7 @@ export default function Admin() {
               </Button>
             </Form>
             <Form.Text className="text-muted">
-              Se envía en <code>Authorization: Bearer &lt;TOKEN&gt;</code> a /api/admin/*
+              Se guarda en cookie segura (HttpOnly) y se envía automáticamente a /api/admin/*
             </Form.Text>
             {error && <Alert variant="danger" className="mt-2">{error}</Alert>}
           </Card.Body>
@@ -597,3 +594,4 @@ export default function Admin() {
     </div>
   )
 }
+

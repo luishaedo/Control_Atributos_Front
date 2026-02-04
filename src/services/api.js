@@ -1,9 +1,5 @@
 import { pad2 } from "../utils/sku.js";
-
-const API_BASE = (import.meta.env?.VITE_API_URL?.replace(/\/$/, "")) || window.location.origin;
-
-// SIEMPRE pega a /api
-const API = (path = "") => `${API_BASE}/api${path}`;
+import { API_BASE, API } from "./apiBase.js";
 
 async function fetchJSON(path, opts = {}) {
   const res = await fetch(API(path), {

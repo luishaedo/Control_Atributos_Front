@@ -1,26 +1,6 @@
 // src/services/adminApi.js — versión completa y consistente
 import { pad2 } from "../utils/sku";
-const API_BASE =
-  import.meta.env?.VITE_API_URL?.replace(/\/$/, "") || window.location.origin;
-
-// ===== Token admin (localStorage)
-
-function getToken() {
-  return localStorage.getItem("cc_admin_token") || "";
-}
-export function adminSetToken(t) {
-  if (!t) localStorage.removeItem("cc_admin_token");
-  else localStorage.setItem("cc_admin_token", String(t));
-}
-export function adminGetToken() {
-  return getToken();
-}
-
-// ===== Headers con Authorization
-function authHeaders(extra = {}) {
-  const t = getToken();
-  return t ? { ...extra, Authorization: `Bearer ${t}` } : { ...extra };
-}
+import { API_BASE } from "./apiBase.js";
 
 // ===== Guards y utilidades comunes
 function assertHasCampaignId(campaniaId, ctx = "operación") {
@@ -44,10 +24,17 @@ function qsFrom(obj) {
 
 // ===== Helpers fetch
 async function fetchAuth(path, options = {}) {
-  const headers = authHeaders(options.headers || {});
-  if (options.body && !headers["Content-Type"])
+  const headers = { ...(options.headers || {}) };
+  const hasBody = options.body !== undefined && options.body !== null;
+  const isForm = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (hasBody && !headers["Content-Type"] && !isForm) {
     headers["Content-Type"] = "application/json";
-  const resp = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  }
+  const resp = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw new Error(text || `HTTP ${resp.status}`);
@@ -66,6 +53,17 @@ async function fetchAuthBlob(path, options) {
 // ======================= Admin: ping
 export function adminPing() {
   return fetchAuthJSON("/api/admin/ping");
+}
+
+export function adminLogin(token) {
+  return fetchAuthJSON("/api/admin/login", {
+    method: "POST",
+    body: JSON.stringify({ token: String(token || "") }),
+  });
+}
+
+export function adminLogout() {
+  return fetchAuthJSON("/api/admin/logout", { method: "POST" });
 }
 
 // ======================= Importadores JSON (si tu back los expone por JSON)
@@ -360,7 +358,7 @@ export function exportSummaryTxt(campaniaId) {
 
 export async function fetchAdminBlobByUrl(url) {
   const fullUrl = url.startsWith("http") ? url : `${API_BASE}${url}`;
-  const resp = await fetch(fullUrl, { headers: authHeaders() });
+  const resp = await fetch(fullUrl, { credentials: "include" });
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw new Error(text || `HTTP ${resp.status}`);
