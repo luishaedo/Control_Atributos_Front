@@ -1,185 +1,114 @@
-import React, { useEffect, useState } from "react";
-import {
-  Card,
-  Button,
-  ButtonGroup,
-  Badge,
-  Stack,
-  Alert,
-} from "react-bootstrap";
-import {
-  getCampaigns,
-  setActiveCampaign,
-  getDictionaries,
-} from "../services/api";
-import { getNombre } from "../utils/texto.js";
+import React, { useEffect, useState } from 'react'
+import { Card, Button, ButtonGroup, Badge, Stack, Alert } from 'react-bootstrap'
+import { getCampaigns, getDictionaries } from '../services/api'
+import { getNombre } from '../utils/texto.js'
 
-const LS_KEY = "cc_last_active_campaign_id";
+const LS_KEY = 'cc_last_active_campaign_id'
 
 export default function CampaignSelector({ onSelect }) {
-  const [listado, setListado] = useState([]);
-  const [dic, setDic] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const activa = listado.find((c) => c.activa);
-  const [selectedId, setSelectedId] = useState(null);
-  const seleccionada = listado.find((c) => c.id === selectedId) || null;
+  const [listado, setListado] = useState([])
+  const [dic, setDic] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const activa = listado.find((c) => c.activa)
+  const [selectedId, setSelectedId] = useState(null)
+  const seleccionada = listado.find((c) => c.id === selectedId) || null
 
   useEffect(() => {
     async function cargar() {
       try {
-        setLoading(true);
-        setError(null);
-        const [camps, d] = await Promise.all([
-          getCampaigns(),
-          getDictionaries(),
-        ]);
-        setListado(camps || []);
-        setDic(d);
-        const saved = Number(localStorage.getItem(LS_KEY) || 0);
-        const savedObj = (camps || []).find((c) => c.id === saved && c.activa) || null;
-        const elegida = savedObj || (camps || []).find((c) => c.activa) || null;
+        setLoading(true)
+        setError(null)
+        const [camps, d] = await Promise.all([getCampaigns(), getDictionaries()])
+        setListado(camps || [])
+        setDic(d)
+        const saved = Number(localStorage.getItem(LS_KEY) || 0)
+        const savedObj = (camps || []).find((c) => c.id === saved && c.activa) || null
+        const elegida = savedObj || (camps || []).find((c) => c.activa) || null
         if (elegida) {
-          onSelect?.(elegida);
-          localStorage.setItem(LS_KEY, String(elegida.id));
+          onSelect?.(elegida)
+          localStorage.setItem(LS_KEY, String(elegida.id))
         } else {
-          onSelect?.(null);
-          localStorage.removeItem(LS_KEY);
+          onSelect?.(null)
+          localStorage.removeItem(LS_KEY)
         }
-        const defaultSelected = elegida?.id || (camps || [])[0]?.id || null;
-        setSelectedId(defaultSelected);
+        const defaultSelected = elegida?.id || (camps || [])[0]?.id || null
+        setSelectedId(defaultSelected)
       } catch (e) {
-        setError(e.message || "Error al cargar campañas/diccionarios");
+        setError(e.message || 'Error al cargar campanas/diccionarios')
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
     }
-    cargar();
-  }, []);
-
-  async function activar(id) {
-    if (!id) return;
-    try {
-      setLoading(true);
-      setError(null);
-      await setActiveCampaign(id);
-      const camps = await getCampaigns();
-      setListado(camps || []);
-      const nuevaActiva = (camps || []).find((c) => c.activa) || null;
-      if (nuevaActiva) {
-        onSelect?.(nuevaActiva);
-        localStorage.setItem(LS_KEY, String(nuevaActiva.id));
-        setSelectedId(nuevaActiva.id);
-      } else {
-        onSelect?.(null);
-        localStorage.removeItem(LS_KEY);
-        setSelectedId(null);
-      }
-    } catch (e) {
-      setError(e.message || "Error al activar campaña");
-    } finally {
-      setLoading(false);
-    }
-  }
+    cargar()
+  }, [onSelect])
 
   function chipObjetivo(c) {
-    if (!dic) return null;
-    const chips = [];
+    if (!dic) return null
+    const chips = []
     if (c.categoria_objetivo_cod) {
-      const nombre = getNombre(dic.categorias, c.categoria_objetivo_cod);
-      chips.push(
-        <Badge key="cat" bg="primary">
-          Cat {c.categoria_objetivo_cod} · {nombre}
-        </Badge>
-      );
+      const nombre = getNombre(dic.categorias, c.categoria_objetivo_cod)
+      chips.push(<Badge key='cat' bg='primary'>Cat {c.categoria_objetivo_cod} - {nombre}</Badge>)
     }
     if (c.tipo_objetivo_cod) {
-      const nombre = getNombre(dic.tipos, c.tipo_objetivo_cod);
-      chips.push(
-        <Badge key="tipo" bg="secondary">
-          Tipo {c.tipo_objetivo_cod} · {nombre}
-        </Badge>
-      );
+      const nombre = getNombre(dic.tipos, c.tipo_objetivo_cod)
+      chips.push(<Badge key='tipo' bg='secondary'>Tipo {c.tipo_objetivo_cod} - {nombre}</Badge>)
     }
     if (c.clasif_objetivo_cod) {
-      const nombre = getNombre(dic.clasif, c.clasif_objetivo_cod);
-      chips.push(
-        <Badge key="clasif" bg="info">
-          Clasif {c.clasif_objetivo_cod} · {nombre}
-        </Badge>
-      );
+      const nombre = getNombre(dic.clasif, c.clasif_objetivo_cod)
+      chips.push(<Badge key='clasif' bg='info'>Clasif {c.clasif_objetivo_cod} - {nombre}</Badge>)
     }
-    if (chips.length === 0)
-      chips.push(
-        <Badge key="none" bg="dark">
-          Sin filtros
-        </Badge>
-      );
-    return (
-      <Stack direction="horizontal" gap={2}>
-        {chips}
-      </Stack>
-    );
+    if (chips.length === 0) chips.push(<Badge key='none' bg='dark'>Sin filtros</Badge>)
+    return <Stack direction='horizontal' gap={2}>{chips}</Stack>
   }
 
-
   return (
-    <Card className="mb-3">
-      <Card.Header className="d-flex justify-content-between align-items-center">
-        <strong>Campañas</strong>
-        <div className="d-flex align-items-center gap-2">
-          <Button
-            variant="success"
-            size="sm"
-            onClick={() => activar(seleccionada?.id)}
-            disabled={loading || !seleccionada || seleccionada.activa}
-          >
-            Activar seleccionada
-          </Button>
-          <ButtonGroup>
-            {listado.map(c => (
-              <Button
-                key={c.id}
-                variant={c.id === selectedId ? 'primary' : 'outline-secondary'}
-                size="sm"
-                onClick={() => setSelectedId(c.id)}
-                disabled={loading}
-              >
-                {c.nombre}{' '}
-                {c.activa ? <Badge bg="light" text="dark">Activa</Badge> : <Badge bg="secondary">Inactiva</Badge>}
-              </Button>
-            ))}
-          </ButtonGroup>
-        </div>
+    <Card className='mb-3'>
+      <Card.Header className='d-flex justify-content-between align-items-center'>
+        <strong>Campanas</strong>
+        <ButtonGroup>
+          {listado.map((c) => (
+            <Button
+              key={c.id}
+              variant={c.id === selectedId ? 'primary' : 'outline-secondary'}
+              size='sm'
+              onClick={() => setSelectedId(c.id)}
+              disabled={loading}
+            >
+              {c.nombre}{' '}
+              {c.activa ? <Badge bg='light' text='dark'>Activa</Badge> : <Badge bg='secondary'>Inactiva</Badge>}
+            </Button>
+          ))}
+        </ButtonGroup>
       </Card.Header>
       <Card.Body>
-        {error && <div className="alert alert-danger mb-2">{error}</div>}
-        {loading && <em>Cargando campañas…</em>}
+        {error && <div className='alert alert-danger mb-2'>{error}</div>}
+        {loading && <em>Cargando campanas...</em>}
 
         {!loading && listado.length === 0 && (
-          <Alert variant="warning" className="mb-0">
-            No hay campañas disponibles. Creá una y activala en el panel de Admin.
+          <Alert variant='warning' className='mb-0'>
+            No hay campanas disponibles. Crea una y activala en el panel de Admin.
           </Alert>
         )}
 
         {!loading && listado.length > 0 && (
           <>
-            <div className="mb-2">
+            <div className='mb-2'>
               <small>
-                Activa: {activa?.nombre || '—'} · Vigencia {activa?.inicia || '—'} → {activa?.termina || '—'}
+                Activa: {activa?.nombre || '-'} � Vigencia {activa?.inicia || '-'} -> {activa?.termina || '-'}
               </small>
             </div>
             {activa ? chipObjetivo(activa) : null}
             {seleccionada && seleccionada.id !== activa?.id && (
-              <div className="mt-2">
-                <small className="text-muted">
-                  Seleccionada: {seleccionada.nombre} · Vigencia {seleccionada.inicia || '—'} → {seleccionada.termina || '—'}
+              <div className='mt-2'>
+                <small className='text-muted'>
+                  Seleccionada: {seleccionada.nombre} � Vigencia {seleccionada.inicia || '-'} -> {seleccionada.termina || '-'}
                 </small>
               </div>
             )}
             {seleccionada && !seleccionada.activa && (
-              <Alert variant="warning" className="mt-2 mb-0">
-                La campaña seleccionada está inactiva. Usá “Activar seleccionada” para habilitarla.
+              <Alert variant='warning' className='mt-2 mb-0'>
+                La campana seleccionada esta inactiva. Activala desde el panel Admin.
               </Alert>
             )}
           </>

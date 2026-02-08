@@ -3,11 +3,11 @@ import React, { useEffect, useState } from 'react'
 import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Spinner, Accordion, Modal, Pagination } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
 import IdentityModal from '../components/IdentityModal.jsx'
-import { getCampaigns, setActiveCampaign, getDictionaries, getMaestroList } from '../services/api.js'
+import { getCampaigns, getDictionaries, getMaestroList } from '../services/api.js'
 import Revisiones from './Revisiones.jsx'
 import {
   adminPing, adminLogin,
-  crearCampania, actualizarCampania,
+  crearCampania, actualizarCampania, activarCampania,
   exportMaestroCSV, exportCategoriasCSV, exportTiposCSV, exportClasifCSV
 } from '../services/adminApi.js'
 import { uploadDiccionarios, uploadMaestro } from '../services/adminImportApi.js'
@@ -165,7 +165,7 @@ export default function Admin() {
 
   async function activarCamp(id) {
     try {
-      await setActiveCampaign(id)
+      await activarCampania(id)
       cargarCampanias()
     } catch (e) {
       setError(e.message || 'No se pudo activar')

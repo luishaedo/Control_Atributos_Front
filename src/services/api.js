@@ -28,10 +28,6 @@ export async function getCampaigns() {
   return [];
 }
 
-export async function setActiveCampaign(id) {
-  return fetchJSON(`/campanias/${id}/activar`, { method: "POST" });
-}
-
 // ---- Maestro + Escaneos
 const MASTER_TIMEOUT_MS = 8000;
 export async function getMasterBySku(sku) {

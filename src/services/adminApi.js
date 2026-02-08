@@ -168,11 +168,18 @@ export function cerrarCampania(campaniaId) {
   });
 }
 
-// ======================= Campañas (crear por público /api)
+// ======================= Campañas
 export function crearCampania(data) {
-  return fetchAuthJSON("/api/campanias", {
+  return fetchAuthJSON("/api/admin/campanias", {
     method: "POST",
     body: JSON.stringify(data || {}),
+  });
+}
+
+export function activarCampania(id) {
+  if (!id) throw new Error("id requerido para activarCampania");
+  return fetchAuthJSON(`/api/admin/campanias/${encodeURIComponent(id)}/activar`, {
+    method: "POST",
   });
 }
 
