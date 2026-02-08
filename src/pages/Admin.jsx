@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import React, { useEffect, useState } from 'react'
-import { Container, Card, Form, Button, Row, Col, Alert, Tab, Tabs, Table, Spinner, Accordion, Modal, Pagination } from 'react-bootstrap'
+import { Container, Card, Form, Button, Row, Col, Alert, Table, Spinner, Accordion, Modal, Pagination } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
 import IdentityModal from '../components/IdentityModal.jsx'
 import { getCampaigns, getDictionaries, getMaestroList } from '../services/api.js'
@@ -259,17 +259,20 @@ export default function Admin() {
             Auditoría
           </Button>
         </div>
-        <Tabs activeKey={activeAdminTab} onSelect={(k) => setActiveAdminTab(k || 'revisiones')} className="mb-3">
-           <Tab eventKey="revisiones" title="Acciones">
+        {activeAdminTab === 'revisiones' && (
+          <div className="mb-3">
             <Revisiones
               campanias={campanias}
               campaniaIdDefault={(campanias.find(c=>c.activa)?.id || campanias[0]?.id)}
               authOK={authOK}
             />
-          </Tab>
-          <Tab eventKey="import" title="Maestro & Diccionarios">
+          </div>
+        )}
+
+        {activeAdminTab === 'import' && (
+          <>
             <Card className="mb-3">
-  <Card.Header>Importar por Archivo (CSV)</Card.Header>
+              <Card.Header>Importar por Archivo (CSV)</Card.Header>
   <Card.Body>
     <Row className="g-3">
       <Col md={6}>
@@ -348,8 +351,8 @@ export default function Admin() {
       </ul>
       <div>Los códigos 1..9 se normalizan automáticamente a 2 dígitos (01..09).</div>
     </div>
-  </Card.Body>
-</Card>
+              </Card.Body>
+            </Card>
             <div className="d-flex justify-content-end mb-2">
               <Button variant="outline-secondary" size="sm" onClick={cargarPreview}>
                 Actualizar vista
@@ -463,9 +466,10 @@ export default function Admin() {
                 </Accordion.Body>
               </Accordion.Item>
             </Accordion>
-          </Tab>
+          </>
+        )}
 
-          <Tab eventKey="campanias" title="Campañas">
+        {activeAdminTab === 'campanias' && (
             <Row className="g-3">
               <Col md={6}>
                 <Card>
@@ -540,8 +544,7 @@ export default function Admin() {
                 </Card>
               </Col>
             </Row>
-          </Tab>
-        </Tabs>
+        )}
       </Container>
       <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered>
         <Modal.Header closeButton>
@@ -594,4 +597,3 @@ export default function Admin() {
     </div>
   )
 }
-
