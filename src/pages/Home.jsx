@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { Alert, Container } from 'react-bootstrap'
+import { Container } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
 import CampaignSelector from '../components/CampaignSelector.jsx'
 import ScanBox from '../components/ScanBox.jsx'
 import IdentityModal from '../components/IdentityModal.jsx'
+import { AppAlert } from '../components/ui.jsx'
 
 function getUserLS() {
   try {
@@ -45,9 +46,12 @@ export default function Home() {
       <Container className="pb-4">
         <CampaignSelector onSelect={setCampania} />
         {!campania?.activa && (
-          <Alert variant="warning">
-            No hay campaña activa. Seleccioná una campaña activa o activala para comenzar a escanear.
-          </Alert>
+          <AppAlert
+            variant="warning"
+            title="Campaña no activa"
+            message="No hay una campaña activa seleccionada."
+            actionHint="Seleccioná y activá una campaña para comenzar a escanear."
+          />
         )}
         <ScanBox user={user} campania={campania} />
       </Container>

@@ -11,7 +11,7 @@ import {
   exportMaestroCSV, exportCategoriasCSV, exportTiposCSV, exportClasifCSV
 } from '../services/adminApi.js'
 import { uploadDiccionarios, uploadMaestro } from '../services/adminImportApi.js'
-import { AppButton } from '../components/ui.jsx'
+import { AppAlert, AppButton } from '../components/ui.jsx'
 import { buildActionableError } from '../utils/uiFeedback.js'
 
 
@@ -96,7 +96,7 @@ export default function Admin() {
       setError(null)
       setImportMsg('')
       const r = await uploadDiccionarios(filesDic)
-      setImportMsg(`Diccionarios OK → categorías=${r.categorias}, tipos=${r.tipos}, clasif=${r.clasif}`)
+      setImportMsg(`Se actualizaron diccionarios: categorías=${r.categorias}, tipos=${r.tipos}, clasif=${r.clasif}`)
       setDicUploadButtonState('success')
       resetButtonState(setDicUploadButtonState)
       cargarPreview()
@@ -124,7 +124,7 @@ export default function Admin() {
       setError(null)
       setImportMsg('')
       const r = await uploadMaestro({ maestro: fileMae })
-      setImportMsg(`Maestro OK → ${r.count} items`)
+      setImportMsg(`Se cargó archivo maestro con ${r.count} registros`)
       setMaeUploadButtonState('success')
       resetButtonState(setMaeUploadButtonState)
       cargarPreview()
@@ -274,13 +274,13 @@ export default function Admin() {
           </Card.Body>
         </Card>
         <div className="d-flex justify-content-end u-mb-16 gap-2">
-          <Button variant="outline-secondary" onClick={() => setActiveAdminTab('campanias')}>
+          <Button variant={activeAdminTab === 'campanias' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('campanias')}>
             Campaña
           </Button>
-          <Button variant="outline-secondary" onClick={() => setActiveAdminTab('import')}>
+          <Button variant={activeAdminTab === 'import' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('import')}>
             Maestro
           </Button>
-          <Button variant="outline-primary" onClick={() => navigate('/auditoria')}>
+          <Button variant="outline-secondary" onClick={() => navigate('/auditoria')}>
             Auditoría
           </Button>
         </div>
@@ -363,8 +363,8 @@ export default function Admin() {
           className="btn btn-primary"
           onClick={importarMaePorArchivo}
           state={!authOK || isUploading || !fileMae ? 'disabled' : maeUploadButtonState}
-          label="Subir maestro"
-          loadingLabel="Subiendo maestro…"
+          label="Cargar archivo maestro"
+          loadingLabel="Cargando archivo maestro…"
           successLabel="Maestro cargado"
           errorLabel="Error al subir"
         />
@@ -377,7 +377,15 @@ export default function Admin() {
         <span>Cargando…</span>
       </div>
     )}
-    {importMsg && <Alert variant="success" className="mt-3">{importMsg}</Alert>}
+    {importMsg && (
+      <AppAlert
+        variant="success"
+        className="mt-3"
+        title="Importación completada"
+        message={importMsg}
+        actionHint="Revisá el preview para validar los datos antes de continuar."
+      />
+    )}
 
     <div className="mt-3 small text-muted">
       <div>Encabezados esperados:</div>

@@ -35,7 +35,7 @@ import {
   resolveAttributeValue,
   shortUserLabel,
 } from '../utils/revisionesHelpers.jsx'
-import { EmptyState } from '../components/ui.jsx'
+import { AppAlert, EmptyState } from '../components/ui.jsx'
 import {
   // Revisiones
   getRevisiones, decidirRevision,
@@ -1187,13 +1187,14 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
         </Toast>
       </ToastContainer>
       {uiMessage && (
-        <Alert
+        <AppAlert
           variant={uiMessage.variant || 'info'}
+          title="Estado de revisión"
+          message={uiMessage.text}
+          actionHint="Revisá el resultado y continuá con el siguiente SKU."
           dismissible
           onClose={() => setUiMessage(null)}
-        >
-          {uiMessage.text}
-        </Alert>
+        />
       )}
 
       {/* Barra superior común */}
@@ -1269,7 +1270,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 Siguiente artículo
               </Button>
               <Button
-                variant="success"
+                variant="primary"
                 onClick={() => onMarkReady(currentEvaluarItem)}
                 disabled={!currentEvaluarItem || activeEvalTab !== 'pending'}
               >
@@ -1278,14 +1279,22 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
             </div>
           </div>
           {evaluarNotice && (
-            <Alert variant="info" onClose={() => setEvaluarNotice('')} dismissible>
-              {evaluarNotice}
-            </Alert>
+            <AppAlert
+              variant="info"
+              title="Novedad en evaluación"
+              message={evaluarNotice}
+              actionHint="Podés continuar con la cola o ajustar filtros."
+              dismissible
+              onClose={() => setEvaluarNotice('')}
+            />
           )}
           {activeEvalTab === 'pending' && !evaluateQueue.length && (
-            <Alert variant="warning">
-              No hay pendientes a evaluar. Los SKUs listos pasarán a Confirmación.
-            </Alert>
+            <AppAlert
+              variant="warning"
+              title="Sin pendientes"
+              message="No hay pendientes a evaluar en este momento."
+              actionHint="Los SKUs listos pasarán a Confirmación automáticamente."
+            />
           )}
 
           {activeEvalTab === 'pending' && currentEvaluarItem && (() => {

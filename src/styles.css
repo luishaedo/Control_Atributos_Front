@@ -5,6 +5,12 @@
   --space-16: 16px;
   --space-24: 24px;
   --space-32: 32px;
+
+  --color-info: #0d6efd;
+  --color-success: #198754;
+  --color-warning: #f59f00;
+  --color-danger: #dc3545;
+  --color-neutral: #6c757d;
 }
 
 .u-mb-4 { margin-bottom: var(--space-4) !important; }
@@ -27,3 +33,23 @@
 .u-density-comfortable .form-label { margin-bottom: var(--space-8); }
 .u-density-comfortable .form-control,
 .u-density-comfortable .form-select { padding-top: 0.55rem; padding-bottom: 0.55rem; }
+
+.app-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.app-section-title {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.app-kpi-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.app-empty-state .app-icon {
+  color: var(--color-neutral);
+}

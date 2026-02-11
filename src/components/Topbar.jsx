@@ -1,12 +1,16 @@
 import React from 'react'
 import { Navbar, Container, Badge, Button } from 'react-bootstrap'
 import { Link } from 'react-router-dom'
+import { AppIcon } from './ui.jsx'
 
 export default function Topbar({ user, onChangeUser }) {
   return (
     <Navbar bg="dark" data-bs-theme="dark" className="mb-3">
       <Container>
-        <Navbar.Brand as={Link} to="/">🧪 Control de Campaña</Navbar.Brand>
+        <Navbar.Brand as={Link} to="/" className="d-inline-flex align-items-center gap-2 app-section-title">
+          <AppIcon name="flask" size={18} />
+          <span>Control de Campaña</span>
+        </Navbar.Brand>
         <div className="d-flex align-items-center gap-3">
           <Link to="/admin" className="btn btn-outline-warning btn-sm">Admin</Link>
           <span className="text-light small">
