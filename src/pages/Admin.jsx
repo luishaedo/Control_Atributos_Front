@@ -273,29 +273,30 @@ export default function Admin() {
             {error && <Alert variant="danger" className="mt-2">{error}</Alert>}
           </Card.Body>
         </Card>
-        <div className="d-flex justify-content-end u-mb-16 gap-2">
-          <Button variant={activeAdminTab === 'campanias' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('campanias')}>
-            Campaña
-          </Button>
-          <Button variant={activeAdminTab === 'import' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('import')}>
-            Maestro
-          </Button>
-          <Button variant="outline-secondary" onClick={() => navigate('/auditoria')}>
-            Auditoría
-          </Button>
-        </div>
-        {activeAdminTab === 'revisiones' && (
-          <div className="mb-3">
-            <Revisiones
-              campanias={campanias}
-              campaniaIdDefault={(campanias.find(c=>c.activa)?.id || campanias[0]?.id)}
-              authOK={authOK}
-            />
+        <div className={!authOK ? 'admin-content-locked' : ''}>
+          <div className="d-flex justify-content-end u-mb-16 gap-2">
+            <Button variant={activeAdminTab === 'campanias' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('campanias')}>
+              Campaña
+            </Button>
+            <Button variant={activeAdminTab === 'import' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('import')}>
+              Maestro
+            </Button>
+            <Button variant="outline-secondary" onClick={() => navigate('/auditoria')}>
+              Auditoría
+            </Button>
           </div>
-        )}
+          {activeAdminTab === 'revisiones' && (
+            <div className="mb-3">
+              <Revisiones
+                campanias={campanias}
+                campaniaIdDefault={(campanias.find(c=>c.activa)?.id || campanias[0]?.id)}
+                authOK={authOK}
+              />
+            </div>
+          )}
 
-        {activeAdminTab === 'import' && (
-          <>
+          {activeAdminTab === 'import' && (
+            <>
             <Card className="mb-3">
               <Card.Header>Importar por Archivo (CSV)</Card.Header>
   <Card.Body>
@@ -510,10 +511,10 @@ export default function Admin() {
                 </Accordion.Body>
               </Accordion.Item>
             </Accordion>
-          </>
-        )}
+            </>
+          )}
 
-        {activeAdminTab === 'campanias' && (
+          {activeAdminTab === 'campanias' && (
             <Row className="g-3">
               <Col md={6}>
                 <Card>
@@ -588,7 +589,8 @@ export default function Admin() {
                 </Card>
               </Col>
             </Row>
-        )}
+          )}
+        </div>
       </Container>
       <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered>
         <Modal.Header closeButton>
