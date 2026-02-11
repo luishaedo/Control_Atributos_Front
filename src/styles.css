@@ -53,3 +53,29 @@
 .app-empty-state .app-icon {
   color: var(--color-neutral);
 }
+
+.campaign-active-pill {
+  border: 1px solid #d9e6ff;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.campaign-active-pill__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #3f6fb5;
+  font-weight: 700;
+}
+
+.campaign-active-pill__name {
+  font-weight: 700;
+  color: #123a7d;
+  line-height: 1.2;
+}
+
+.campaign-active-pill__range {
+  font-size: 0.84rem;
+  color: #345d9e;
+}
