@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Card, Form, Row, Col, Alert } from 'react-bootstrap'
+import { Card, Form, Row, Col } from 'react-bootstrap'
 import StatusBadge from './StatusBadge.jsx'
 import SuggestionForm from './SuggestionForm.jsx'
-import { AppButton } from './ui.jsx'
+import { AppAlert, AppButton, AppIcon } from './ui.jsx'
 import { cleanSku, pad2 } from '../utils/sku.js'
 import { getDictionaries, getMasterBySku, getCampaignMasterBySku, saveScan } from '../services/api.js'
 import { getNombre } from '../utils/texto.js'
@@ -219,9 +219,13 @@ export default function ScanBox({ user, campania }) {
       </Card.Header>
       <Card.Body>
         {!canScan && (
-          <Alert variant="warning" className="mb-3">
-            No hay campaña activa. Activá una campaña para habilitar el escaneo.
-          </Alert>
+          <AppAlert
+            variant="warning"
+            className="mb-3"
+            title="Escaneo deshabilitado"
+            message="No hay campaña activa para esta vista."
+            actionHint="Activá una campaña desde Admin para habilitar el escaneo."
+          />
         )}
         <Form onSubmit={procesar}>
           <Row className="g-2 align-items-end">
@@ -249,8 +253,8 @@ export default function ScanBox({ user, campania }) {
                 type="submit"
                 className="btn btn-primary me-2"
                 state={!canScan ? 'disabled' : processButtonState}
-                label="Procesar"
-                loadingLabel="Procesando SKU…"
+                label="Validar SKU"
+                loadingLabel="Validando SKU…"
                 successLabel="Procesado"
                 errorLabel="Error al procesar"
               />
@@ -259,7 +263,7 @@ export default function ScanBox({ user, campania }) {
                 className="btn btn-success"
                 state={!resultado || !campania?.id || !canScan ? 'disabled' : saveButtonState}
                 onClick={guardarYContinuar}
-                label="Guardar & Continuar"
+                label="Aplicar cambios y continuar"
                 loadingLabel="Guardando…"
                 successLabel="Guardado"
                 errorLabel="Error al guardar"
@@ -269,27 +273,37 @@ export default function ScanBox({ user, campania }) {
         </Form>
 
         {error && (
-          <Alert variant="danger" className="mt-3">
-            {error}
-          </Alert>
+          <AppAlert
+            variant="danger"
+            className="mt-3"
+            title="No se pudieron aplicar cambios"
+            message={error}
+            actionHint="Revisá los datos del SKU, corregí campos obligatorios y volvé a intentar."
+          />
         )}
 
         {guardadoInfo && (
-          <Alert variant="success" className="mt-3">
-            Guardado OK · SKU {guardadoInfo.sku} · {guardadoInfo.at.toLocaleString()}
+          <AppAlert
+            variant="success"
+            className="mt-3"
+            title={`Se aplicaron cambios al SKU ${guardadoInfo.sku}`}
+            message={`Actualizado el ${guardadoInfo.at.toLocaleString()} · Cambios aplicados: 1`}
+            actionHint="Continuá con el siguiente SKU o revisá el historial en Revisiones."
+          >
             {guardadoInfo.skuType === 'UNKNOWN' && guardadoInfo.unknown && (
               <div className="mt-1 text-muted small">
                 Unknown · Estado: {guardadoInfo.unknown.status || '—'}
                 {guardadoInfo.unknown.seenCount !== undefined ? ` · Visto ${guardadoInfo.unknown.seenCount} veces` : ''}
               </div>
             )}
-          </Alert>
+          </AppAlert>
         )}
 
         {resultado && (
           <div className="mt-3">
-            <h6 className="d-flex align-items-center gap-2">
-              Resultado: <StatusBadge estado={resultado.estado} />
+            <h6 className="d-flex align-items-center gap-2 app-section-title">
+              <AppIcon name="infoCircle" size={14} />
+              <span>Resultado:</span> <StatusBadge estado={resultado.estado} />
             </h6>
 
             <div className="d-flex flex-column flex-md-row gap-3 mt-2">
