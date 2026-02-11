@@ -85,7 +85,19 @@ export default function DiscrepanciasSucursalesTabla({ data = [], loading }) {
               </tr>
             ))}
             {!loading && !rows.length && (
-              <tr><td colSpan={4}><EmptyState/></td></tr>
+              <tr>
+                <td colSpan={4}>
+                  <EmptyState
+                    title="Sin discrepancias entre sucursales"
+                    subtitle="No encontramos conflictos con los filtros actuales."
+                    ctaLabel="Ajustar filtros"
+                    onCta={() => {
+                      setBuscar('')
+                      setSoloConflicto(false)
+                    }}
+                  />
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

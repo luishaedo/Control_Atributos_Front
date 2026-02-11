@@ -11,6 +11,8 @@ import {
   exportMaestroCSV, exportCategoriasCSV, exportTiposCSV, exportClasifCSV
 } from '../services/adminApi.js'
 import { uploadDiccionarios, uploadMaestro } from '../services/adminImportApi.js'
+import { AppButton } from '../components/ui.jsx'
+import { buildActionableError } from '../utils/uiFeedback.js'
 
 
 function getUserLS() {
@@ -52,6 +54,12 @@ export default function Admin() {
   const [showIdentityModal, setShowIdentityModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editCamp, setEditCamp] = useState(null)
+  const [dicUploadButtonState, setDicUploadButtonState] = useState('default')
+  const [maeUploadButtonState, setMaeUploadButtonState] = useState('default')
+
+  function resetButtonState(setter, ms = 1800) {
+    window.setTimeout(() => setter('default'), ms)
+  }
 
   useEffect(() => {
     adminPing().then(() => setAuthOK(true)).catch(() => setAuthOK(false))
@@ -78,39 +86,56 @@ export default function Admin() {
     if (isUploadingDic) return
     const hasFiles = Boolean(filesDic.categorias || filesDic.tipos || filesDic.clasif)
     if (!hasFiles) {
-      setError('Seleccioná al menos un archivo de diccionario antes de subir.')
+      setError(buildActionableError({ what: 'No pudimos iniciar la importación.', why: 'No se seleccionó ningún archivo de diccionario.', how: 'Seleccioná al menos un archivo y reintentá.' }))
       return
     }
+    let hasError = false
     try {
+      setDicUploadButtonState('loading')
       setIsUploadingDic(true)
       setError(null)
       setImportMsg('')
       const r = await uploadDiccionarios(filesDic)
       setImportMsg(`Diccionarios OK → categorías=${r.categorias}, tipos=${r.tipos}, clasif=${r.clasif}`)
+      setDicUploadButtonState('success')
+      resetButtonState(setDicUploadButtonState)
       cargarPreview()
     } catch (e) {
-      setError(e.message || 'Error importando diccionarios (archivo)')
+      hasError = true
+      setError(buildActionableError({ what: 'No pudimos importar diccionarios.', why: e.message || 'El archivo no pudo procesarse.', how: 'Validá formato/encabezados y reintentá.' }))
+      setDicUploadButtonState('error')
+      resetButtonState(setDicUploadButtonState, 2200)
     } finally {
       setIsUploadingDic(false)
+      if (!hasError) setFilesDic({ categorias: null, tipos: null, clasif: null })
     }
   }
+
   async function importarMaePorArchivo() {
     if (isUploadingMae) return
     if (!fileMae) {
-      setError('Seleccioná un archivo maestro antes de subir.')
+      setError(buildActionableError({ what: 'No pudimos iniciar la importación.', why: 'No se seleccionó archivo maestro.', how: 'Seleccioná un CSV de maestro y reintentá.' }))
       return
     }
+    let hasError = false
     try {
+      setMaeUploadButtonState('loading')
       setIsUploadingMae(true)
       setError(null)
       setImportMsg('')
       const r = await uploadMaestro({ maestro: fileMae })
       setImportMsg(`Maestro OK → ${r.count} items`)
+      setMaeUploadButtonState('success')
+      resetButtonState(setMaeUploadButtonState)
       cargarPreview()
     } catch (e) {
-      setError(e.message || 'Error importando maestro (archivo)')
+      hasError = true
+      setError(buildActionableError({ what: 'No pudimos importar el maestro.', why: e.message || 'El archivo no pudo procesarse.', how: 'Validá formato/encabezados y reintentá.' }))
+      setMaeUploadButtonState('error')
+      resetButtonState(setMaeUploadButtonState, 2200)
     } finally {
       setIsUploadingMae(false)
+      if (!hasError) setFileMae(null)
     }
   }
 
@@ -228,8 +253,8 @@ export default function Admin() {
   return (
     <div>
       <Topbar user={user} onChangeUser={cambiarIdentificacion} />
-      <Container className="pb-5">
-        <Card className="mb-3">
+      <Container className="pb-5 u-section-stack">
+        <Card className="u-mb-16">
           <Card.Body>
             <Form onSubmit={doLogin} className="d-flex gap-2">
               <Form.Control
@@ -248,7 +273,7 @@ export default function Admin() {
             {error && <Alert variant="danger" className="mt-2">{error}</Alert>}
           </Card.Body>
         </Card>
-        <div className="d-flex justify-content-end mb-2 gap-2">
+        <div className="d-flex justify-content-end u-mb-16 gap-2">
           <Button variant="outline-secondary" onClick={() => setActiveAdminTab('campanias')}>
             Campaña
           </Button>
@@ -308,12 +333,16 @@ export default function Admin() {
           />
         </Form.Group>
 
-        <Button
+        <AppButton
+          type="button"
+          className="btn btn-primary"
           onClick={importarDicPorArchivo}
-          disabled={!authOK || isUploading || !(filesDic.categorias || filesDic.tipos || filesDic.clasif)}
-        >
-          Subir diccionarios
-        </Button>
+          state={!authOK || isUploading || !(filesDic.categorias || filesDic.tipos || filesDic.clasif) ? 'disabled' : dicUploadButtonState}
+          label="Subir diccionarios"
+          loadingLabel="Subiendo diccionarios…"
+          successLabel="Diccionarios cargados"
+          errorLabel="Error al subir"
+        />
       </Col>
 
       <Col md={6}>
@@ -329,9 +358,16 @@ export default function Admin() {
           />
         </Form.Group>
 
-        <Button onClick={importarMaePorArchivo} disabled={!authOK || isUploading || !fileMae}>
-          Subir maestro
-        </Button>
+        <AppButton
+          type="button"
+          className="btn btn-primary"
+          onClick={importarMaePorArchivo}
+          state={!authOK || isUploading || !fileMae ? 'disabled' : maeUploadButtonState}
+          label="Subir maestro"
+          loadingLabel="Subiendo maestro…"
+          successLabel="Maestro cargado"
+          errorLabel="Error al subir"
+        />
       </Col>
     </Row>
 
@@ -353,7 +389,7 @@ export default function Admin() {
     </div>
               </Card.Body>
             </Card>
-            <div className="d-flex justify-content-end mb-2">
+            <div className="d-flex justify-content-end u-mb-16">
               <Button variant="outline-secondary" size="sm" onClick={cargarPreview}>
                 Actualizar vista
               </Button>

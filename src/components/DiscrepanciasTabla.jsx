@@ -23,7 +23,17 @@ export default function DiscrepanciasTabla({ data = [], loading, onExportCSV, ex
   }, [data, buscar, soloConflicto])
 
   if (!loading && (!rows || rows.length === 0)) {
-    return <EmptyState title="Sin discrepancias" subtitle="No hay diferencias con el maestro para los filtros dados." />
+    return (
+      <EmptyState
+        title="Sin discrepancias"
+        subtitle="No hay diferencias con el maestro para los filtros dados."
+        ctaLabel="Ajustar filtros"
+        onCta={() => {
+          setBuscar('')
+          setSoloConflicto(false)
+        }}
+      />
+    )
   }
 
   return (
