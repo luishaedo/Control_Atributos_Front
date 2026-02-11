@@ -7,6 +7,22 @@ import { buildActionableError } from '../utils/uiFeedback.js'
 
 const LS_KEY = 'cc_last_active_campaign_id'
 
+
+function formatCampaignDate(value) {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat('es-CO', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(parsed)
+}
+
+function formatCampaignRange(start, end) {
+  return `${formatCampaignDate(start)} → ${formatCampaignDate(end)}`
+}
+
 export default function CampaignSelector({ onSelect }) {
   const [listado, setListado] = useState([])
   const [dic, setDic] = useState(null)
@@ -109,14 +125,14 @@ export default function CampaignSelector({ onSelect }) {
           <>
             <div className="u-mb-8">
               <small>
-                Activa: {activa?.nombre || '-'} · Vigencia {activa?.inicia || '-'} → {activa?.termina || '-'}
+                Activa: {activa?.nombre || '-'} · Vigencia {formatCampaignRange(activa?.inicia, activa?.termina)}
               </small>
             </div>
             {activa ? chipObjetivo(activa) : null}
             {seleccionada && seleccionada.id !== activa?.id && (
               <div className="u-mt-8">
                 <small className="text-muted">
-                  Seleccionada: {seleccionada.nombre} · Vigencia {seleccionada.inicia || '-'} → {seleccionada.termina || '-'}
+                  Seleccionada: {seleccionada.nombre} · Vigencia {formatCampaignRange(seleccionada.inicia, seleccionada.termina)}
                 </small>
               </div>
             )}

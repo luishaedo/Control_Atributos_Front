@@ -9,7 +9,7 @@ export default function Topbar({ user, onChangeUser }) {
       <Container>
         <Navbar.Brand as={Link} to="/" className="d-inline-flex align-items-center gap-2 app-section-title">
           <AppIcon name="flask" size={18} />
-          <span>Control de Campaña</span>
+          <span>Control de Atributos</span>
         </Navbar.Brand>
         <div className="d-flex align-items-center gap-3">
           <Link to="/admin" className="btn btn-outline-warning btn-sm">Admin</Link>
@@ -18,7 +18,7 @@ export default function Topbar({ user, onChangeUser }) {
           </span>
           <Badge bg="info">{user?.sucursal || 'sin sucursal'}</Badge>
           <Button variant="outline-light" size="sm" onClick={onChangeUser}>
-            Cambiar identificación
+            LOGIN
           </Button>
         </div>
       </Container>
