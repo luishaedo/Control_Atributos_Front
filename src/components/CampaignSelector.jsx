@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Card, Button, ButtonGroup, Badge, Stack } from 'react-bootstrap'
+import { Card, Button, ButtonGroup, Badge, Stack, Spinner } from 'react-bootstrap'
 import { getCampaigns, getDictionaries } from '../services/api'
 import { getNombre } from '../utils/texto.js'
 import { EmptyState } from './ui.jsx'
@@ -37,7 +37,9 @@ export default function CampaignSelector({ onSelect }) {
       try {
         setLoading(true)
         setError(null)
-        const [camps, d] = await Promise.all([getCampaigns(), getDictionaries()])
+        const minDelay = new Promise((resolve) => window.setTimeout(resolve, 2000))
+        const dataRequest = Promise.all([getCampaigns(), getDictionaries()])
+        const [[camps, d]] = await Promise.all([dataRequest, minDelay])
         setListado(camps || [])
         setDic(d)
         const saved = Number(localStorage.getItem(LS_KEY) || 0)
@@ -109,7 +111,12 @@ export default function CampaignSelector({ onSelect }) {
       </Card.Header>
       <Card.Body>
         {error && <div className="alert alert-danger mb-2">{error}</div>}
-        {loading && <em>Cargando campañas...</em>}
+        {loading && (
+          <div className="d-flex align-items-center gap-2 text-muted">
+            <Spinner animation="border" size="sm" />
+            <span>Cargando campañas...</span>
+          </div>
+        )}
 
         {!loading && listado.length === 0 && (
           <EmptyState
@@ -123,10 +130,12 @@ export default function CampaignSelector({ onSelect }) {
 
         {!loading && listado.length > 0 && (
           <>
-            <div className="u-mb-8">
-              <small>
-                Activa: {activa?.nombre || '-'} · Vigencia {formatCampaignRange(activa?.inicia, activa?.termina)}
-              </small>
+            <div className="campaign-active-pill u-mb-8">
+              <div className="campaign-active-pill__label">Campaña activa</div>
+              <div className="campaign-active-pill__name">{activa?.nombre || '-'}</div>
+              <div className="campaign-active-pill__range">
+                Vigencia {formatCampaignRange(activa?.inicia, activa?.termina)}
+              </div>
             </div>
             {activa ? chipObjetivo(activa) : null}
             {seleccionada && seleccionada.id !== activa?.id && (

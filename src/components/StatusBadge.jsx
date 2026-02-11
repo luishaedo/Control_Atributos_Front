@@ -7,6 +7,11 @@ export default function StatusBadge({ estado }) {
     'REVISAR': 'warning',
     'NO_MAESTRO': 'danger',
   }
+  const labels = {
+    'OK': 'Sistema',
+    'REVISAR': 'Revisar',
+    'NO_MAESTRO': 'Fuera del Sistema',
+  }
   const variant = map[estado] || 'secondary'
-  return <Badge bg={variant}>{estado || '—'}</Badge>
+  return <Badge bg={variant}>{labels[estado] || estado || '—'}</Badge>
 }

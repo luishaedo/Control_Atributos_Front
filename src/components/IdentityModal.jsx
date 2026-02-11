@@ -26,12 +26,12 @@ export default function IdentityModal({ show, initialEmail = '', initialSucursal
       </Modal.Header>
       <Modal.Body>
         <Form.Group className="mb-3">
-          <Form.Label>Email</Form.Label>
+          <Form.Label>Nombre</Form.Label>
           <Form.Control
-            type="email"
+            type="text"
             value={email}
             onChange={e => setEmail(e.target.value)}
-            placeholder="correo@empresa.com"
+            placeholder="Ej: Juan Pérez"
             autoFocus
           />
         </Form.Group>

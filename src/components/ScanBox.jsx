@@ -19,8 +19,11 @@ export default function ScanBox({ user, campania }) {
   const [error, setError] = useState('')
   const [processButtonState, setProcessButtonState] = useState('default')
   const [saveButtonState, setSaveButtonState] = useState('default')
+  const [validatedSku, setValidatedSku] = useState('')
   const inputRef = useRef(null)
   const canScan = Boolean(campania?.activa)
+  const currentCleanSku = cleanSku(skuRaw)
+  const hasDirtySkuAfterValidation = Boolean(resultado && validatedSku && currentCleanSku !== validatedSku)
 
   useEffect(() => {
     getDictionaries()
@@ -41,6 +44,7 @@ export default function ScanBox({ user, campania }) {
     setSkuRaw('')
     setProcessButtonState('default')
     setSaveButtonState('default')
+    setValidatedSku('')
   }, [campania?.id])
 
   function resetButtonState(setter, ms = 1800) {
@@ -68,6 +72,7 @@ export default function ScanBox({ user, campania }) {
 
     const limpio = cleanSku(skuRaw)
     setSku(limpio)
+    setValidatedSku('')
     if (!limpio) {
       setProcessButtonState('default')
       return
@@ -93,6 +98,7 @@ export default function ScanBox({ user, campania }) {
     if (!maestro) {
       setResultado({ estado: 'NO_MAESTRO', maestro: null, asumidos: null })
       setSugeridos({})
+      setValidatedSku(limpio)
       setProcessButtonState('success')
       resetButtonState(setProcessButtonState)
       return
@@ -105,12 +111,13 @@ export default function ScanBox({ user, campania }) {
       setResultado({ estado: 'REVISAR', maestro, asumidos: maestro })
     }
 
+    setValidatedSku(limpio)
     setProcessButtonState('success')
     resetButtonState(setProcessButtonState)
   }
 
   async function guardarYContinuar() {
-    if (!resultado || !canScan) return
+    if (!resultado || !canScan || hasDirtySkuAfterValidation) return
 
     if (!campania?.id) {
       setError(buildActionableError({
@@ -189,6 +196,7 @@ export default function ScanBox({ user, campania }) {
     })
     setSkuRaw('')
     setSku('')
+    setValidatedSku('')
     setSugeridos({})
     setResultado(null)
     setSaveButtonState('success')
@@ -206,7 +214,7 @@ export default function ScanBox({ user, campania }) {
         <Card.Body className={`py-2 px-3 border-start border-3 ${same ? 'border-success' : 'border-warning'}`}>
           <div className="text-muted small">{nombre}</div>
           <div className="fw-semibold">{aNombre || '—'}</div>
-          <div className="small text-muted">Maestro: {mNombre || '—'}</div>
+          <div className="small text-muted">Sistema: {mNombre || '—'}</div>
         </Card.Body>
       </Card>
     )
@@ -231,7 +239,7 @@ export default function ScanBox({ user, campania }) {
           <Row className="g-2 align-items-end">
             <Col md={7}>
               <Form.Group>
-                <Form.Label>Código / SKU</Form.Label>
+                <Form.Label>Artículo</Form.Label>
                 <Form.Control
                   inputMode="text"
                   pattern="^[A-Za-z0-9]+([#$].*)?$"
@@ -255,13 +263,13 @@ export default function ScanBox({ user, campania }) {
                 successLabel="Procesado"
                 errorLabel="Error al procesar"
               />
-              <AppButton
-                type="button"
-                className="btn btn-success"
-                state={!resultado || !campania?.id || !canScan ? 'disabled' : saveButtonState}
-                onClick={guardarYContinuar}
-                label="Aplicar cambios y continuar"
-                loadingLabel="Guardando…"
+                <AppButton
+                  type="button"
+                  className="btn btn-success"
+                  state={!resultado || !campania?.id || !canScan || hasDirtySkuAfterValidation ? 'disabled' : saveButtonState}
+                  onClick={guardarYContinuar}
+                  label="Aplicar cambios y continuar"
+                  loadingLabel="Guardando…"
                 successLabel="Guardado"
                 errorLabel="Error al guardar"
               />
@@ -298,6 +306,14 @@ export default function ScanBox({ user, campania }) {
 
         {resultado && (
           <div className="mt-3">
+            {hasDirtySkuAfterValidation && (
+              <AppAlert
+                variant="warning"
+                className="mb-3"
+                title="Revalidación requerida"
+                message="El artículo fue modificado después de validar. Validalo de nuevo antes de guardar."
+              />
+            )}
             <h6 className="d-flex align-items-center gap-2 app-section-title">
               <AppIcon name="infoCircle" size={14} />
               <span>Resultado:</span> <StatusBadge estado={resultado.estado} />
