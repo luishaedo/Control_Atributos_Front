@@ -243,9 +243,6 @@ export default function ScanBox({ user, campania }) {
                   required
                   disabled={!canScan}
                 />
-                <Form.Text>
-                  Se toma sólo el prefijo alfanumérico y se normaliza en MAYÚSCULA.
-                </Form.Text>
               </Form.Group>
             </Col>
             <Col md={5}>
