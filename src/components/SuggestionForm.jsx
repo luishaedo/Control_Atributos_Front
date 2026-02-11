@@ -1,8 +1,7 @@
 ﻿import React from 'react'
 import { Row, Col, Form } from 'react-bootstrap'
-import { getNombre } from '../utils/texto.js'
 
-export default function SuggestionForm({ dic, estado, sugeridos, onChange, maestro }) {
+export default function SuggestionForm({ dic, estado, sugeridos, onChange }) {
   if (!dic) return null
 
   const obligatorio = estado === 'NO_MAESTRO'
@@ -23,9 +22,6 @@ export default function SuggestionForm({ dic, estado, sugeridos, onChange, maest
             </option>
           ))}
         </Form.Select>
-        <Form.Text muted>
-          Maestro: <strong>{getNombre(opciones, maestro?.[name]) || '—'}</strong>
-        </Form.Text>
       </Form.Group>
     )
   }

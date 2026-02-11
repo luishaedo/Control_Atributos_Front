@@ -214,7 +214,6 @@ export default function ScanBox({ user, campania }) {
         <Card.Body className={`py-2 px-3 border-start border-3 ${same ? 'border-success' : 'border-warning'}`}>
           <div className="text-muted small">{nombre}</div>
           <div className="fw-semibold">{aNombre || '—'}</div>
-          <div className="small text-muted">Sistema: {mNombre || '—'}</div>
         </Card.Body>
       </Card>
     )
