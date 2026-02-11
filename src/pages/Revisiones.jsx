@@ -35,6 +35,7 @@ import {
   resolveAttributeValue,
   shortUserLabel,
 } from '../utils/revisionesHelpers.jsx'
+import { EmptyState } from '../components/ui.jsx'
 import {
   // Revisiones
   getRevisiones, decidirRevision,
@@ -1196,7 +1197,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       )}
 
       {/* Barra superior común */}
-      <Card className="mb-3">
+      <Card className="u-mb-16 u-density-comfortable">
         <Card.Body className="row g-2">
           <div className="col-md-3">
             <Form.Label>Campaña</Form.Label>
@@ -1233,7 +1234,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
         </Card.Body>
       </Card>
 
-      <Tabs activeKey={activeTab} onSelect={k => setActiveTab(k || 'revisiones')} className="mb-3">
+      <Tabs activeKey={activeTab} onSelect={k => setActiveTab(k || 'revisiones')} className="u-mb-16">
         {/* ====== TAB: Revisiones (tarjetas) ====== */}
         <Tab eventKey="revisiones" title="Evaluar">
           <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
@@ -1529,7 +1530,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
             )
           })()}
           {activeEvalTab === 'pending' && !currentEvaluarItem && (
-            <Card body className="text-center text-muted">No hay resultados con los filtros actuales.</Card>
+            <Card body><EmptyState title="Sin resultados" subtitle="No hay resultados con los filtros actuales." ctaLabel="Ajustar filtros" onCta={() => { setFiltroDecision('pendientes'); setSku(''); setConsenso('') }} /></Card>
           )}
 
           {activeEvalTab === 'unknown' && (
@@ -1648,9 +1649,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                     })}
                     {!unknownQueue.length && (
                       <tr>
-                        <td colSpan={6} className="text-center text-muted">
-                          No hay SKUs desconocidos.
-                        </td>
+                        <td colSpan={6}><EmptyState title="Sin SKUs desconocidos" subtitle="No hay pendientes de clasificación manual." ctaLabel="Cargar archivo maestro" onCta={() => window.scrollTo({ top: 0, behavior: 'smooth' })} /></td>
                       </tr>
                     )}
                   </tbody>
@@ -1767,9 +1766,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                     })}
                     {!confirmItems.length && (
                       <tr>
-                        <td colSpan={6} className="text-center text-muted">
-                          No hay SKUs en confirmación.
-                        </td>
+                        <td colSpan={6}><EmptyState title="Sin SKUs en confirmación" subtitle="No hay ítems listos para confirmar con los filtros actuales." ctaLabel="Volver a Evaluar" onCta={() => setActiveTab('revisiones')} /></td>
                       </tr>
                     )}
                   </tbody>
@@ -1850,9 +1847,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                     })}
                     {!consolidateItems.length && (
                       <tr>
-                        <td colSpan={3} className="text-center text-muted">
-                          No hay SKUs en consolidación.
-                        </td>
+                        <td colSpan={3}><EmptyState title="Sin SKUs en consolidación" subtitle="Todavía no hay cambios para exportar o cerrar campaña." ctaLabel="Ir a Confirmación" onCta={() => setActiveTab('confirm')} /></td>
                       </tr>
                     )}
                   </tbody>

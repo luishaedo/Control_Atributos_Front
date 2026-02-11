@@ -3,8 +3,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Modal } from 'react-bootstrap'
 import DiscrepanciasTabla from '../components/DiscrepanciasTabla'
 import DiscrepanciasSucursalesTabla from '../components/DiscrepanciasSucursalesTabla'
+import { AppButton } from '../components/ui.jsx'
 import { getCampaigns } from '../services/api'
 import { getDiscrepancias, getDiscrepanciasSucursales, exportDiscrepanciasCSV, getAuditoriaResumen } from '../services/adminApi'
+import { buildActionableError } from '../utils/uiFeedback.js'
 
 export default function AuditoriaPage() {
   const [campaniaId, setCampaniaId] = useState('')
@@ -19,6 +21,11 @@ export default function AuditoriaPage() {
   const [summary, setSummary] = useState(null)
   const [error, setError] = useState('')
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [refreshBtnState, setRefreshBtnState] = useState('default')
+
+  function resetRefreshState(ms = 1800) {
+    window.setTimeout(() => setRefreshBtnState('default'), ms)
+  }
 
   const navigate = useNavigate()
 
@@ -38,7 +45,15 @@ export default function AuditoriaPage() {
   }, [])
 
   async function fetchData() {
-    if (!campaniaId) { setError('Ingresá un ID de campaña o activá una campaña.'); return }
+    if (!campaniaId) {
+      setError(buildActionableError({
+        what: 'No pudimos actualizar la auditoría.',
+        why: 'No hay campaña seleccionada.',
+        how: 'Ingresá un ID de campaña o elegí una activa y reintentá.',
+      }))
+      return
+    }
+    setRefreshBtnState('loading')
     setLoading(true); setError('')
     try {
       const [m, s, resumen] = await Promise.all([
@@ -50,13 +65,37 @@ export default function AuditoriaPage() {
       setDataS(s.items || [])
       setSummary(resumen || null)
       if (!(m.items?.length || s.items?.length)) {
-        setError('No hay datos para esta campaña. Escaneá algunos SKUs o revisá los filtros.')
+        setError(buildActionableError({
+          what: 'No encontramos resultados para esta auditoría.',
+          why: 'La campaña no tiene discrepancias con los filtros actuales.',
+          how: 'Escaneá SKUs o ajustá filtros para ampliar resultados.',
+        }))
       }
+      setRefreshBtnState('success')
+      resetRefreshState()
     } catch (e) {
       const msg = String(e?.message || e)
-      if (msg.includes('401')) setError('No autorizado: cargá el ADMIN_TOKEN en /admin.')
-      else if (msg.includes('400')) setError('Parámetros inválidos (revisá campaniaId).')
-      else setError('No se pudo cargar auditoría. Ver consola y red.')
+      if (msg.includes('401')) {
+        setError(buildActionableError({
+          what: 'No pudimos cargar la auditoría.',
+          why: 'La sesión admin no está autorizada (401).',
+          how: 'Iniciá sesión en /admin con ADMIN_TOKEN y volvé a intentar.',
+        }))
+      } else if (msg.includes('400')) {
+        setError(buildActionableError({
+          what: 'No pudimos cargar la auditoría.',
+          why: 'Hay parámetros inválidos en la consulta (400).',
+          how: 'Revisá campaniaId y filtros mínimos, luego reintentá.',
+        }))
+      } else {
+        setError(buildActionableError({
+          what: 'No pudimos cargar la auditoría.',
+          why: msg,
+          how: 'Verificá red/backend y reintentá en unos segundos.',
+        }))
+      }
+      setRefreshBtnState('error')
+      resetRefreshState(2200)
       console.error(e)
     } finally {
       setLoading(false)
@@ -120,8 +159,8 @@ export default function AuditoriaPage() {
   }
 
   return (
-    <div className="container py-4">
-      <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+    <div className="container py-4 u-section-stack">
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 u-header-main">
         <div>
           <button className="btn btn-light border mb-2" onClick={() => navigate('/admin')}>
             ← Volver al Admin
@@ -135,9 +174,16 @@ export default function AuditoriaPage() {
           <button className="btn btn-outline-secondary" onClick={() => setDetailsOpen(true)}>
             Ver detalles
           </button>
-          <button className="btn btn-primary" disabled={loading} onClick={fetchData}>
-            {loading ? 'Cargando…' : 'Actualizar'}
-          </button>
+          <AppButton
+            type="button"
+            className="btn btn-primary"
+            state={loading ? 'loading' : refreshBtnState}
+            onClick={fetchData}
+            label="Actualizar"
+            loadingLabel="Actualizando…"
+            successLabel="Actualizado"
+            errorLabel="Con error"
+          />
         </div>
       </div>
 

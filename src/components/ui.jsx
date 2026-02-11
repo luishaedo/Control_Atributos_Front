@@ -32,7 +32,7 @@ export function ConsensusBar({ value, total }) {
   return (
     <div className="w-100">
       <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin="0" aria-valuemax="100" style={{ height: 10 }}>
-        <div className={`progress-bar ${pct>=60? 'bg-success' : pct>=40? 'bg-warning' : 'bg-danger'}`} style={{ width: `${pct}%` }}/>
+        <div className={`progress-bar ${pct >= 60 ? 'bg-success' : pct >= 40 ? 'bg-warning' : 'bg-danger'}`} style={{ width: `${pct}%` }} />
       </div>
       <small className="text-muted">{pct}% de {total} votos</small>
     </div>
@@ -53,16 +53,76 @@ export function MiniChips({ items = [], max = 3, emptyLabel = '—' }) {
 export function fmtDate(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
-  const pad = (n) => String(n).padStart(2,'0')
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export function EmptyState({ title = 'Sin datos', subtitle = 'No hay información para mostrar' }) {
+export function EmptyState({
+  title = 'Sin datos',
+  subtitle = 'No hay información para mostrar',
+  ctaLabel,
+  onCta,
+  secondaryAction,
+}) {
   return (
     <div className="text-center text-muted p-4">
       <div className="display-6">🗂️</div>
       <div className="fw-semibold">{title}</div>
-      <div>{subtitle}</div>
+      <div className="u-mb-16">{subtitle}</div>
+      {(ctaLabel || secondaryAction) && (
+        <div className="d-flex justify-content-center gap-2 flex-wrap">
+          {ctaLabel && onCta && (
+            <button type="button" className="btn btn-sm btn-primary" onClick={onCta}>
+              {ctaLabel}
+            </button>
+          )}
+          {secondaryAction}
+        </div>
+      )}
     </div>
+  )
+}
+
+export function AppButton({
+  state = 'default',
+  label,
+  loadingLabel = 'Procesando…',
+  successLabel = 'Completado',
+  errorLabel = 'Error',
+  disabled = false,
+  className = '',
+  children,
+  ...props
+}) {
+  const effectiveState = disabled ? 'disabled' : state
+  const isDisabled = effectiveState === 'disabled' || effectiveState === 'loading'
+  const isBusy = effectiveState === 'loading'
+  const content =
+    effectiveState === 'loading' ? loadingLabel
+      : effectiveState === 'success' ? successLabel
+        : effectiveState === 'error' ? errorLabel
+          : (label || children)
+
+  const icon = effectiveState === 'loading'
+    ? <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+    : effectiveState === 'success'
+      ? <span aria-hidden="true">✓</span>
+      : effectiveState === 'error'
+        ? <span aria-hidden="true">⚠</span>
+        : null
+
+  return (
+    <button
+      {...props}
+      className={className}
+      disabled={isDisabled}
+      aria-busy={isBusy}
+      data-state={effectiveState}
+    >
+      <span className="d-inline-flex align-items-center gap-2">
+        {icon}
+        <span>{content}</span>
+      </span>
+    </button>
   )
 }
