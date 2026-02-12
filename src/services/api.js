@@ -1,11 +1,58 @@
 import { pad2 } from "../utils/sku.js";
 import { API_BASE, API } from "./apiBase.js";
 
+const INITIAL_LOAD_TIMEOUT_MS = 10000;
+
+function isRetriableError(error) {
+  return (
+    error?.name === "AbortError" ||
+    /timeout/i.test(String(error?.message || "")) ||
+    /Failed to fetch/i.test(String(error?.message || ""))
+  );
+}
+
+async function fetchWithRetry(path, opts = {}, { retries = 1, retryDelayMs = 500 } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fetchJSON(path, opts);
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries || !isRetriableError(error)) break;
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
+  }
+  throw lastError;
+}
+
 async function fetchJSON(path, opts = {}) {
-  const res = await fetch(API(path), {
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-    ...opts,
-  });
+  const { timeoutMs = 0, signal: externalSignal, ...requestOptions } = opts;
+  const controller = new AbortController();
+  const timeoutId = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
+  const abortListener = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener("abort", abortListener, { once: true });
+  }
+
+  let res;
+  try {
+    res = await fetch(API(path), {
+      headers: { "Content-Type": "application/json", ...(requestOptions.headers || {}) },
+      ...requestOptions,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Request timeout for ${path}`);
+    }
+    throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (externalSignal) externalSignal.removeEventListener("abort", abortListener);
+  }
+
   const ct = res.headers.get("content-type") || "";
   const isJSON = ct.includes("application/json");
   const body = isJSON ? await res.json().catch(() => null) : await res.text().catch(() => "");
@@ -17,12 +64,20 @@ async function fetchJSON(path, opts = {}) {
   return isJSON ? body : {};
 }
 
-export async function getDictionaries() {
-  return fetchJSON("/diccionarios");
+export async function getDictionaries(opts = {}) {
+  return fetchWithRetry(
+    "/diccionarios",
+    { timeoutMs: INITIAL_LOAD_TIMEOUT_MS, ...opts },
+    { retries: 1, retryDelayMs: 500 }
+  );
 }
 
-export async function getCampaigns() {
-  const data = await fetchJSON("/campanias");
+export async function getCampaigns(opts = {}) {
+  const data = await fetchWithRetry(
+    "/campanias",
+    { timeoutMs: INITIAL_LOAD_TIMEOUT_MS, ...opts },
+    { retries: 1, retryDelayMs: 500 }
+  );
   if (Array.isArray(data)) return data;
   if (data && Array.isArray(data.items)) return data.items;
   return [];
