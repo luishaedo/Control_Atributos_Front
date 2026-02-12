@@ -28,36 +28,74 @@ export default function CampaignSelector({ onSelect }) {
   const [dic, setDic] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [dictionaryWarning, setDictionaryWarning] = useState(null)
   const activa = listado.find((c) => c.activa)
   const [selectedId, setSelectedId] = useState(null)
   const seleccionada = listado.find((c) => c.id === selectedId) || null
 
   useEffect(() => {
+    const abortController = new AbortController()
+
+    async function loadCampaigns() {
+      const startedAt = performance.now()
+      const camps = await getCampaigns({ signal: abortController.signal })
+      if (import.meta.env.DEV) {
+        console.info(`[perf] /campanias loaded in ${Math.round(performance.now() - startedAt)}ms`)
+      }
+      return camps
+    }
+
+    async function loadDictionariesInBackground() {
+      const startedAt = performance.now()
+      try {
+        const dictionaries = await getDictionaries({ signal: abortController.signal })
+        if (abortController.signal.aborted) return
+        setDic(dictionaries)
+        setDictionaryWarning(null)
+        if (import.meta.env.DEV) {
+          console.info(`[perf] /diccionarios loaded in ${Math.round(performance.now() - startedAt)}ms`)
+        }
+      } catch (e) {
+        if (abortController.signal.aborted) return
+        setDictionaryWarning('No pudimos cargar los diccionarios. Las campañas siguen disponibles.')
+        if (import.meta.env.DEV) {
+          console.warn(`[perf] /diccionarios failed after ${Math.round(performance.now() - startedAt)}ms`, e)
+        }
+      }
+    }
+
     async function cargar() {
       try {
         setLoading(true)
         setError(null)
-        const minDelay = new Promise((resolve) => window.setTimeout(resolve, 2000))
-        const dataRequest = Promise.all([getCampaigns(), getDictionaries()])
-        const [[camps, d]] = await Promise.all([dataRequest, minDelay])
+        setDictionaryWarning(null)
+        const camps = await loadCampaigns()
+        if (abortController.signal.aborted) return
         setListado(camps || [])
-        setDic(d)
         const saved = Number(localStorage.getItem(LS_KEY) || 0)
         const savedObj = (camps || []).find((c) => c.id === saved && c.activa) || null
         const elegida = savedObj || (camps || []).find((c) => c.activa) || null
         const defaultSelected = elegida?.id || (camps || [])[0]?.id || null
         setSelectedId(defaultSelected)
+
+        loadDictionariesInBackground()
       } catch (e) {
+        if (abortController.signal.aborted) return
         setError(buildActionableError({
           what: 'No pudimos cargar las campañas.',
-          why: e?.message || 'Falló la carga inicial de campañas o diccionarios.',
-          how: 'Recargá la página o verificá la conexión con el backend.',
+          why: e?.message || 'Falló la carga inicial de campañas.',
+          how: 'Reintentá en unos segundos o verificá la conexión con el backend.',
         }))
       } finally {
-        setLoading(false)
+        if (!abortController.signal.aborted) setLoading(false)
       }
     }
+
     cargar()
+
+    return () => {
+      abortController.abort()
+    }
   }, [])
 
   useEffect(() => {
@@ -111,6 +149,7 @@ export default function CampaignSelector({ onSelect }) {
       </Card.Header>
       <Card.Body>
         {error && <div className="alert alert-danger mb-2">{error}</div>}
+        {dictionaryWarning && !error && <div className="alert alert-warning mb-2">{dictionaryWarning}</div>}
         {loading && (
           <div className="d-flex align-items-center gap-2 text-muted">
             <Spinner animation="border" size="sm" />
