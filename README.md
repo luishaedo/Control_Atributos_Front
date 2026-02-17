@@ -15,7 +15,21 @@ npm run dev
 ## Stack
 - React 18 (Vite)
 - Bootstrap 5 + react-bootstrap
-- Sin router ni estado global
+- React Router
+- ESLint + Vitest para validación automática
+
+
+## Quality checks
+```bash
+npm run lint
+npm run test
+npm run build
+```
+
+Para ejecutar el gate completo en un solo comando:
+```bash
+npm run quality:check
+```
 
 ## Variables de entorno
 - `VITE_API_URL` (requerida en todos los entornos): URL base del backend, por ejemplo `http://localhost:4000` en local o `https://mi-backend.ejemplo.com` en producción.
