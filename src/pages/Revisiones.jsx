@@ -120,6 +120,14 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     setConfirmTargets,
   })
 
+  const filtrarPropuestas = useCallback((p) => {
+    if (filtroDecision === 'todas') return true
+    if (filtroDecision === 'pendientes') return !p.decision || p.decision?.estado === 'pendiente'
+    if (filtroDecision === 'rechazadas') return p.decision?.estado === 'rechazada'
+    if (filtroDecision === 'aceptadas') return p.decision && p.decision.estado !== 'rechazada'
+    return true
+  }, [filtroDecision])
+
   const evaluarItems = useMemo(() => (
     (items || [])
       .map((it) => ({
@@ -961,15 +969,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     }
     return acc
   }, { pendientes:0, aceptadas:0, rechazadas:0 })
-
-  const filtrarPropuestas = useCallback((p) => {
-    if (filtroDecision === 'todas') return true
-    if (filtroDecision === 'pendientes') return !p.decision || p.decision?.estado === 'pendiente'
-    if (filtroDecision === 'rechazadas') return p.decision?.estado === 'rechazada'
-    if (filtroDecision === 'aceptadas') return p.decision && p.decision.estado !== 'rechazada'
-    return true
-  }, [filtroDecision])
-
   const { colaFiltrada, allVisibleSelected } = useColaFilters({
     cola,
     colaEstado,
@@ -1775,7 +1774,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     </>
   )
 }
-
 
 
 
