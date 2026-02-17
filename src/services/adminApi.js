@@ -1,5 +1,5 @@
 // src/services/adminApi.js — versión completa y consistente
-import { pad2 } from "../utils/sku";
+import { pad2 } from "../utils/sku.js";
 import { API_BASE } from "./apiBase.js";
 
 // ===== Guards y utilidades comunes

@@ -18,7 +18,12 @@ npm run dev
 - Sin router ni estado global
 
 ## Variables de entorno
-- `VITE_API_URL` (requerida en producciÃ³n): URL base del backend, por ejemplo `https://mi-backend.ejemplo.com`.
+- `VITE_API_URL` (requerida en todos los entornos): URL base del backend, por ejemplo `http://localhost:4000` en local o `https://mi-backend.ejemplo.com` en producción.
+
+Ejemplo de `.env.local`:
+```
+VITE_API_URL=http://localhost:4000
+```
 
 ## Deploy (Vercel)
 - Este proyecto usa React Router con `BrowserRouter`.

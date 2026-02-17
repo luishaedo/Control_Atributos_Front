@@ -10,6 +10,7 @@ export default function ExportsPanel({
   masterPage,
   onMasterPageChange,
   masterPageSize,
+  previewError,
   onExportCategories,
   onExportTypes,
   onExportClassifications,
@@ -22,6 +23,7 @@ export default function ExportsPanel({
       <Accordion.Item eventKey="diccionarios">
         <Accordion.Header>Ver diccionarios cargados</Accordion.Header>
         <Accordion.Body>
+          {previewError && <div className="alert alert-warning mb-3">{previewError}</div>}
           <div className="d-flex gap-2 flex-wrap mb-3">
             <Button variant="outline-secondary" onClick={onExportCategories} disabled={!authOK}>
               Descargar categorías (CSV)

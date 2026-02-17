@@ -21,8 +21,12 @@ export function useCampaignManagement({ setError }) {
     try {
       const list = await getCampaigns()
       setCampaigns(list)
-    } catch (_) {
-      // noop
+      setError(null)
+    } catch (error) {
+      setError(error.message || 'No se pudieron cargar las campañas')
+      if (import.meta.env.DEV) {
+        console.warn('[admin] campaign load failed', error)
+      }
     }
   }
 

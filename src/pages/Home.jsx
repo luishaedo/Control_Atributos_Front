@@ -5,21 +5,10 @@ import CampaignSelector from '../components/CampaignSelector.jsx'
 import ScanBox from '../components/ScanBox.jsx'
 import IdentityModal from '../components/IdentityModal.jsx'
 import { AppAlert } from '../components/ui.jsx'
-
-function getUserLS() {
-  try {
-    return JSON.parse(localStorage.getItem('cc_user') || 'null')
-  } catch {
-    return null
-  }
-}
-
-function setUserLS(u) {
-  localStorage.setItem('cc_user', JSON.stringify(u || {}))
-}
+import { clearStoredUser, getStoredUser, setStoredUser } from '../utils/userStorage.js'
 
 export default function Home() {
-  const [user, setUser] = useState(getUserLS() || { email: '', sucursal: '' })
+  const [user, setUser] = useState(getStoredUser() || { email: '', sucursal: '' })
   const [campania, setCampania] = useState(null)
   const [showIdentityModal, setShowIdentityModal] = useState(false)
 
@@ -32,7 +21,7 @@ export default function Home() {
 
   function guardarIdentificacion(nuevo) {
     setUser(nuevo)
-    setUserLS(nuevo)
+    setStoredUser(nuevo)
     setShowIdentityModal(false)
   }
 
@@ -40,9 +29,15 @@ export default function Home() {
     setShowIdentityModal(true)
   }
 
+  function limpiarIdentificacion() {
+    clearStoredUser()
+    setUser({ email: '', sucursal: '' })
+    setShowIdentityModal(true)
+  }
+
   return (
     <div>
-      <Topbar user={user} onChangeUser={cambiarIdentificacion} />
+      <Topbar user={user} onChangeUser={cambiarIdentificacion} onClearUser={limpiarIdentificacion} />
       <Container className="pb-4">
         <CampaignSelector onSelect={setCampania} />
         {!campania?.activa && (

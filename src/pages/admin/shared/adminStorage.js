@@ -1,11 +1,13 @@
+import { clearStoredUser, getStoredUser, setStoredUser } from '../../../utils/userStorage.js'
+
 export function getUserFromLocalStorage() {
-  try {
-    return JSON.parse(localStorage.getItem('cc_user') || 'null')
-  } catch {
-    return null
-  }
+  return getStoredUser()
 }
 
 export function setUserInLocalStorage(user) {
-  localStorage.setItem('cc_user', JSON.stringify(user || {}))
+  setStoredUser(user)
+}
+
+export function clearUserFromLocalStorage() {
+  clearStoredUser()
 }
