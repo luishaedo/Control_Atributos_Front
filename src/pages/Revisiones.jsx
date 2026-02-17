@@ -154,6 +154,35 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     return [...ordered, ...remaining]
   }, [evaluarItems, evaluarOrder])
 
+  const getEffectiveValue = useCallback((item, field) => {
+    const overrides = unknownEdits[item.sku] || {}
+    if (overrides[field]) return overrides[field]
+    return resolveAttributeValue(item, field)
+  }, [unknownEdits])
+
+  const getChangeCountForItem = useCallback((item) => {
+    if (!item?.maestro) return 3
+    const fields = ['categoria_cod', 'tipo_cod', 'clasif_cod']
+    return fields.reduce((acc, field) => {
+      const original = field === 'categoria_cod'
+        ? item?.maestro?.categoria_cod
+        : field === 'tipo_cod'
+          ? item?.maestro?.tipo_cod
+          : item?.maestro?.clasif_cod
+      const nextValue = getEffectiveValue(item, field)
+      return acc + (String(nextValue || '') !== String(original || '') ? 1 : 0)
+    }, 0)
+  }, [getEffectiveValue])
+
+  const hasPropuestaDif = useCallback((item) => {
+    if (!item?.maestro) return false
+    return (item?.propuestas || []).some((p) => (
+      String(p?.categoria_cod || '') !== String(item?.maestro?.categoria_cod || '') ||
+      String(p?.tipo_cod || '') !== String(item?.maestro?.tipo_cod || '') ||
+      String(p?.clasif_cod || '') !== String(item?.maestro?.clasif_cod || '')
+    ))
+  }, [])
+
   useEffect(() => {
     setStageBySku((prev) => {
       const next = { ...prev }
@@ -325,35 +354,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       hasValidCode(dic?.clasif, item?.clasif_cod)
     )
   }
-
-  const getEffectiveValue = useCallback((item, field) => {
-    const overrides = unknownEdits[item.sku] || {}
-    if (overrides[field]) return overrides[field]
-    return resolveAttributeValue(item, field)
-  }, [unknownEdits])
-
-  const getChangeCountForItem = useCallback((item) => {
-    if (!item?.maestro) return 3
-    const fields = ['categoria_cod', 'tipo_cod', 'clasif_cod']
-    return fields.reduce((acc, field) => {
-      const original = field === 'categoria_cod'
-        ? item?.maestro?.categoria_cod
-        : field === 'tipo_cod'
-          ? item?.maestro?.tipo_cod
-          : item?.maestro?.clasif_cod
-      const nextValue = getEffectiveValue(item, field)
-      return acc + (String(nextValue || '') !== String(original || '') ? 1 : 0)
-    }, 0)
-  }, [getEffectiveValue])
-
-  const hasPropuestaDif = useCallback((item) => {
-    if (!item?.maestro) return false
-    return (item?.propuestas || []).some((p) => (
-      String(p?.categoria_cod || '') !== String(item?.maestro?.categoria_cod || '') ||
-      String(p?.tipo_cod || '') !== String(item?.maestro?.tipo_cod || '') ||
-      String(p?.clasif_cod || '') !== String(item?.maestro?.clasif_cod || '')
-    ))
-  }, [])
 
   function isUnknownReady(sku) {
     const edits = unknownEdits[sku] || {}
@@ -1774,6 +1774,5 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     </>
   )
 }
-
 
 
