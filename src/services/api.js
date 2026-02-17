@@ -1,5 +1,6 @@
 import { pad2 } from "../utils/sku.js";
 import { API_BASE, API } from "./apiBase.js";
+import { fetchHttpJson } from "./httpClient.js";
 
 const INITIAL_LOAD_TIMEOUT_MS = 10000;
 const MASTER_TIMEOUT_MS = 8000;
@@ -36,57 +37,16 @@ async function fetchJSON(path, opts = {}) {
     ...requestOptions
   } = opts;
 
-  const controller = new AbortController();
-  const timeoutId = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
-
-  const abortListener = () => controller.abort();
-  if (externalSignal) {
-    if (externalSignal.aborted) controller.abort();
-    else externalSignal.addEventListener("abort", abortListener, { once: true });
-  }
-
-  let res;
-  try {
-    res = await fetch(API(path), {
-      headers: { "Content-Type": "application/json", ...(requestOptions.headers || {}) },
-      ...requestOptions,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    const normalizedError = controller.signal.aborted
-      ? new Error(`Request timeout for ${path}`)
-      : error;
-
-    if (onRequestError) {
-      throw onRequestError(normalizedError);
-    }
-
-    throw normalizedError;
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-    if (externalSignal) externalSignal.removeEventListener("abort", abortListener);
-  }
-
-  if (returnNullOn404 && res.status === 404) return null;
-
-  const ct = res.headers.get("content-type") || "";
-  const isJSON = ct.includes("application/json");
-  const body = isJSON ? await res.json().catch(() => null) : await res.text().catch(() => "");
-
-  if (!res.ok) {
-    const rawMsg = (isJSON && (body?.error || body?.message))
-      ? (body.error || body.message)
-      : String(body || res.statusText);
-
-    if (onHttpError) {
-      throw onHttpError({ status: res.status, statusText: res.statusText, message: rawMsg });
-    }
-
-    throw new Error(`HTTP ${res.status} ${res.statusText} — ${rawMsg}`);
-  }
-
-  return isJSON ? body : {};
+  return fetchHttpJson(API(path), {
+    timeoutMs,
+    signal: externalSignal,
+    onRequestError,
+    onHttpError,
+    returnNullOn404,
+    ...requestOptions,
+  });
 }
+
 
 export async function getDictionaries(opts = {}) {
   return fetchWithRetry(
