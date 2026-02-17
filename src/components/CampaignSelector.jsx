@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, Button, ButtonGroup, Badge, Stack, Spinner } from 'react-bootstrap'
-import { getCampaigns, getDictionaries } from '../services/api'
+import { getCampaigns, getDictionaries } from '../services/api.js'
 import { getNombre } from '../utils/texto.js'
 import { EmptyState } from './ui.jsx'
 import { buildActionableError } from '../utils/uiFeedback.js'
 
 const LS_KEY = 'cc_last_active_campaign_id'
-
 
 function formatCampaignDate(value) {
   if (!value) return '-'
@@ -24,6 +24,7 @@ function formatCampaignRange(start, end) {
 }
 
 export default function CampaignSelector({ onSelect }) {
+  const navigate = useNavigate()
   const [listado, setListado] = useState([])
   const [dic, setDic] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -162,7 +163,7 @@ export default function CampaignSelector({ onSelect }) {
             title="No hay campañas disponibles"
             subtitle="Todavía no existe una campaña activa para operar."
             ctaLabel="Ir a Admin > Crear campaña"
-            onCta={() => { window.location.href = '/admin' }}
+            onCta={() => navigate('/admin')}
             secondaryAction={<small className="text-muted">Luego activala para habilitar escaneo.</small>}
           />
         )}

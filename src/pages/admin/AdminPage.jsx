@@ -9,7 +9,7 @@ import {
   exportTiposCSV,
   exportClasifCSV,
 } from '../../services/adminApi.js'
-import { getUserFromLocalStorage, setUserInLocalStorage } from './shared/adminStorage.js'
+import { clearUserFromLocalStorage, getUserFromLocalStorage, setUserInLocalStorage } from './shared/adminStorage.js'
 import { useAdminAuth } from './modules/AdminAuth/useAdminAuth.js'
 import AdminAuthPanel from './modules/AdminAuth/AdminAuthPanel.jsx'
 import { useCampaignManagement } from './modules/CampaignManagement/useCampaignManagement.js'
@@ -59,6 +59,7 @@ export default function AdminPage() {
     masterPage,
     setMasterPage,
     masterPageSize,
+    previewError,
     loadPreview,
   } = useExports()
 
@@ -108,7 +109,15 @@ export default function AdminPage() {
 
   return (
     <div>
-      <Topbar user={user} onChangeUser={() => setShowIdentityModal(true)} />
+      <Topbar
+        user={user}
+        onChangeUser={() => setShowIdentityModal(true)}
+        onClearUser={() => {
+          clearUserFromLocalStorage()
+          setUser({ email: '', sucursal: '' })
+          setShowIdentityModal(true)
+        }}
+      />
 
       <Container className="pb-5 u-section-stack">
         <AdminAuthPanel
@@ -165,6 +174,7 @@ export default function AdminPage() {
                 masterPage={masterPage}
                 onMasterPageChange={setMasterPage}
                 masterPageSize={masterPageSize}
+                previewError={previewError}
                 onExportCategories={() => downloadBlob(exportCategoriasCSV, 'categorias.csv')}
                 onExportTypes={() => downloadBlob(exportTiposCSV, 'tipos.csv')}
                 onExportClassifications={() => downloadBlob(exportClasifCSV, 'clasif.csv')}

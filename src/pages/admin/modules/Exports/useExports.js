@@ -6,6 +6,7 @@ export function useExports() {
   const [masterPreview, setMasterPreview] = useState({ items: [], total: 0 })
   const [masterQuery, setMasterQuery] = useState('')
   const [masterPage, setMasterPage] = useState(1)
+  const [previewError, setPreviewError] = useState(null)
   const masterPageSize = 20
 
   useEffect(() => {
@@ -15,6 +16,7 @@ export function useExports() {
 
   async function loadPreview() {
     try {
+      setPreviewError(null)
       const [dic, master] = await Promise.all([
         getDictionaries(),
         getMaestroList({ q: masterQuery, page: masterPage, pageSize: masterPageSize }),
@@ -25,8 +27,11 @@ export function useExports() {
         items: master?.items || [],
         total: master?.total || 0,
       })
-    } catch (_) {
-      // noop
+    } catch (error) {
+      setPreviewError('No se pudo cargar la vista previa de diccionarios/maestro. Reintentá.')
+      if (import.meta.env.DEV) {
+        console.warn('[admin] exports preview load failed', error)
+      }
     }
   }
 
@@ -38,6 +43,7 @@ export function useExports() {
     masterPage,
     setMasterPage,
     masterPageSize,
+    previewError,
     loadPreview,
   }
 }
