@@ -1,6 +1,7 @@
 // src/services/adminApi.js — versión completa y consistente
 import { pad2 } from "../utils/sku.js";
 import { API_BASE } from "./apiBase.js";
+import { fetchHttpBlob, fetchHttpJson } from "./httpClient.js";
 
 // ===== Guards y utilidades comunes
 function assertHasCampaignId(campaniaId, ctx = "operación") {
@@ -23,32 +24,30 @@ function qsFrom(obj) {
 
 
 // ===== Helpers fetch
-async function fetchAuth(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
-  const hasBody = options.body !== undefined && options.body !== null;
-  const isForm = typeof FormData !== "undefined" && options.body instanceof FormData;
-  if (hasBody && !headers["Content-Type"] && !isForm) {
-    headers["Content-Type"] = "application/json";
-  }
-  const resp = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
+function createAdminUrl(path) {
+  return `${API_BASE}${path}`;
+}
+
+function toAdminHttpError({ status, message }) {
+  return new Error(message || `HTTP ${status}`);
+}
+
+function fetchAuthJSON(path, options = {}) {
+  return fetchHttpJson(createAdminUrl(path), {
     credentials: "include",
+    onHttpError: toAdminHttpError,
+    ...options,
   });
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(text || `HTTP ${resp.status}`);
-  }
-  return resp;
 }
-async function fetchAuthJSON(path, options) {
-  const r = await fetchAuth(path, options);
-  return r.json().catch(() => ({}));
+
+function fetchAuthBlob(path, options = {}) {
+  return fetchHttpBlob(createAdminUrl(path), {
+    credentials: "include",
+    onHttpError: toAdminHttpError,
+    ...options,
+  });
 }
-async function fetchAuthBlob(path, options) {
-  const r = await fetchAuth(path, options);
-  return r.blob();
-}
+
 
 // ======================= Admin: ping
 export function adminPing() {
@@ -363,14 +362,12 @@ export function exportSummaryTxt(campaniaId) {
   return fetchAuthBlob(`/api/admin/export/txt/summary?${qsFrom({ campaniaId: id })}`);
 }
 
-export async function fetchAdminBlobByUrl(url) {
+export function fetchAdminBlobByUrl(url) {
   const fullUrl = url.startsWith("http") ? url : `${API_BASE}${url}`;
-  const resp = await fetch(fullUrl, { credentials: "include" });
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(text || `HTTP ${resp.status}`);
-  }
-  return resp.blob();
+  return fetchHttpBlob(fullUrl, {
+    credentials: "include",
+    onHttpError: toAdminHttpError,
+  });
 }
 
 function normalizeDictionaryPayload(payload) {
