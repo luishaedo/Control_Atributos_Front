@@ -1,5 +1,5 @@
 // src/pages/Revisiones.jsx
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   Card,
@@ -13,7 +13,6 @@ import {
   Accordion,
   OverlayTrigger,
   Tooltip,
-  Dropdown,
   ButtonGroup,
   Tabs,
   Tab,
@@ -27,7 +26,6 @@ import {
   badgeDecision,
   buildAttributeOptions,
   consensusLabel,
-  etiqueta,
   etiquetaNombre,
   getAcceptedAttributeCode,
   getAcceptedAttributeDecision,
@@ -141,7 +139,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   }, [campaniaIdDefault])
 
   // ===== Carga datos =====
-  async function cargar() {
+  const cargar = useCallback(async () => {
     // Tarjetas
     const data = await getRevisiones({
       campaniaId, sku, consenso, soloConDiferencias: String(soloDif)
@@ -159,9 +157,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     setCola(acts.items || [])
     // sanea selección (por si cambió la vista)
     setSeleccion(sel => sel.filter(id => (acts.items || []).some(a => a.id === id)))
-  }
+  }, [campaniaId, colaArchivada, colaEstado, consenso, sku, soloDif])
 
-  async function loadMissingItems() {
+  const loadMissingItems = useCallback(async () => {
     if (!authOK || !campaniaId) return
     try {
       setMissingLoading(true)
@@ -173,9 +171,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     } finally {
       setMissingLoading(false)
     }
-  }
+  }, [authOK, campaniaId])
 
-  async function loadConfirmaciones() {
+  const loadConfirmaciones = useCallback(async () => {
     if (!authOK || !campaniaId) return
     try {
       setConfirmLoading(true)
@@ -187,9 +185,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     } finally {
       setConfirmLoading(false)
     }
-  }
+  }, [authOK, campaniaId])
 
-  async function loadConsolidacion() {
+  const loadConsolidacion = useCallback(async () => {
     if (!authOK || !campaniaId) return
     try {
       setConsolidateLoading(true)
@@ -201,25 +199,22 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     } finally {
       setConsolidateLoading(false)
     }
-  }
+  }, [authOK, campaniaId])
 
   useEffect(() => {
     if (!authOK || !campaniaId) return
     cargar().catch(e => console.error('[Revisiones] cargar error', e))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaniaId, authOK, colaEstado, colaArchivada, soloDif, consenso, sku])
+  }, [authOK, campaniaId, cargar])
 
   useEffect(() => {
     if (activeTab !== 'export') return
     loadMissingItems()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, campaniaId, authOK])
+  }, [activeTab, loadMissingItems])
 
   useEffect(() => {
     if (activeTab !== 'confirm') return
     loadConfirmaciones()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, campaniaId, authOK])
+  }, [activeTab, loadConfirmaciones])
 
   useEffect(() => {
     if (!confirmItems.length) return
@@ -235,8 +230,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   useEffect(() => {
     if (activeTab !== 'consolidate') return
     loadConsolidacion()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, campaniaId, authOK])
+  }, [activeTab, loadConsolidacion])
 
   useEffect(() => () => {
     if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
@@ -249,7 +243,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
         propsFiltradas: it.propuestas.filter(filtrarPropuestas),
       }))
       .filter((it) => it.propsFiltradas.length > 0)
-  ), [items, filtroDecision])
+  ), [filtrarPropuestas, items])
 
   useEffect(() => {
     setEvaluarOrder((prev) => {
@@ -293,7 +287,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       })
       return next
     })
-  }, [orderedEvaluarItems])
+  }, [getChangeCountForItem, hasPropuestaDif, orderedEvaluarItems])
 
   useEffect(() => {
     setConfirmFlags((prev) => {
@@ -315,7 +309,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       })
       return next
     })
-  }, [orderedEvaluarItems])
+  }, [getChangeCountForItem, hasPropuestaDif, orderedEvaluarItems])
 
   const evaluateQueue = useMemo(
     () => orderedEvaluarItems.filter((it) => stageBySku[it.sku] === 'evaluate'),
@@ -440,13 +434,13 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     )
   }
 
-  function getEffectiveValue(item, field) {
+  const getEffectiveValue = useCallback((item, field) => {
     const overrides = unknownEdits[item.sku] || {}
     if (overrides[field]) return overrides[field]
     return resolveAttributeValue(item, field)
-  }
+  }, [unknownEdits])
 
-  function getChangeCountForItem(item) {
+  const getChangeCountForItem = useCallback((item) => {
     if (!item?.maestro) return 3
     const fields = ['categoria_cod', 'tipo_cod', 'clasif_cod']
     return fields.reduce((acc, field) => {
@@ -458,16 +452,16 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       const nextValue = getEffectiveValue(item, field)
       return acc + (String(nextValue || '') !== String(original || '') ? 1 : 0)
     }, 0)
-  }
+  }, [getEffectiveValue])
 
-  function hasPropuestaDif(item) {
+  const hasPropuestaDif = useCallback((item) => {
     if (!item?.maestro) return false
     return (item?.propuestas || []).some((p) => (
       String(p?.categoria_cod || '') !== String(item?.maestro?.categoria_cod || '') ||
       String(p?.tipo_cod || '') !== String(item?.maestro?.tipo_cod || '') ||
       String(p?.clasif_cod || '') !== String(item?.maestro?.clasif_cod || '')
     ))
-  }
+  }, [])
 
   function isUnknownReady(sku) {
     const edits = unknownEdits[sku] || {}
@@ -1084,19 +1078,19 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     return acc
   }, { pendientes:0, aceptadas:0, rechazadas:0 })
 
-  function filtrarPropuestas(p) {
+  const filtrarPropuestas = useCallback((p) => {
     if (filtroDecision === 'todas') return true
     if (filtroDecision === 'pendientes') return !p.decision || p.decision?.estado === 'pendiente'
     if (filtroDecision === 'rechazadas') return p.decision?.estado === 'rechazada'
     if (filtroDecision === 'aceptadas') return p.decision && p.decision.estado !== 'rechazada'
     return true
-  }
+  }, [filtroDecision])
 
   // ===== Filtro por columnas (cola) =====
   function incluye(v, term) {
     return String(v || '').toLowerCase().includes(String(term || '').toLowerCase())
   }
-  function filtroRow(a) {
+  const filtroRow = useCallback((a) => {
     if (colaEstado && a.estado !== colaEstado) return false
     if (fEstado && a.estado !== fEstado) return false
 
@@ -1109,11 +1103,10 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     if (fNewCla && !incluye(a.new_clasif_cod, fNewCla)) return false
     if (fDecideBy && !incluye(a.decidedBy, fDecideBy)) return false
     return true
-  }
+  }, [colaEstado, fDecideBy, fEstado, fNewCat, fNewCla, fNewTipo, fOldCat, fOldCla, fOldTipo, fSKU])
   const colaFiltrada = useMemo(
     () => (cola || []).filter(filtroRow),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cola, colaEstado, fEstado, fSKU, fOldCat, fNewCat, fOldTipo, fNewTipo, fOldCla, fNewCla, fDecideBy]
+    [cola, filtroRow]
   )
   const allVisibleSelected = useMemo(() => {
     const visibles = new Set(colaFiltrada.map(a => a.id))

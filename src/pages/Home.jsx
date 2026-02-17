@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { Container } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
 import CampaignSelector from '../components/CampaignSelector.jsx'
@@ -10,14 +10,7 @@ import { clearStoredUser, getStoredUser, setStoredUser } from '../utils/userStor
 export default function Home() {
   const [user, setUser] = useState(getStoredUser() || { email: '', sucursal: '' })
   const [campania, setCampania] = useState(null)
-  const [showIdentityModal, setShowIdentityModal] = useState(false)
-
-  useEffect(() => {
-    if (!user?.email || !user?.sucursal) {
-      setShowIdentityModal(true)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const [showIdentityModal, setShowIdentityModal] = useState(!user?.email || !user?.sucursal)
 
   function guardarIdentificacion(nuevo) {
     setUser(nuevo)

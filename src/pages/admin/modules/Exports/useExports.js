@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getDictionaries, getMaestroList } from '../../../../services/api.js'
 
 export function useExports() {
@@ -9,12 +9,7 @@ export function useExports() {
   const [previewError, setPreviewError] = useState(null)
   const masterPageSize = 20
 
-  useEffect(() => {
-    loadPreview()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [masterQuery, masterPage])
-
-  async function loadPreview() {
+  const loadPreview = useCallback(async () => {
     try {
       setPreviewError(null)
       const [dic, master] = await Promise.all([
@@ -33,7 +28,11 @@ export function useExports() {
         console.warn('[admin] exports preview load failed', error)
       }
     }
-  }
+  }, [masterPage, masterPageSize, masterQuery])
+
+  useEffect(() => {
+    loadPreview()
+  }, [loadPreview])
 
   return {
     dictionaryPreview,

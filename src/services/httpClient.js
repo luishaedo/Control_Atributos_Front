@@ -91,3 +91,17 @@ export function fetchHttpJson(url, options = {}) {
 export function fetchHttpBlob(url, options = {}) {
   return fetchHttp(url, { ...options, responseType: "blob" });
 }
+
+export function createHttpClient(baseOptions = {}) {
+  return {
+    request(url, options = {}) {
+      return fetchHttp(url, { ...baseOptions, ...options });
+    },
+    json(url, options = {}) {
+      return fetchHttpJson(url, { ...baseOptions, ...options });
+    },
+    blob(url, options = {}) {
+      return fetchHttpBlob(url, { ...baseOptions, ...options });
+    },
+  };
+}
