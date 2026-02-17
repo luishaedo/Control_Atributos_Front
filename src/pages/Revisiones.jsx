@@ -23,6 +23,8 @@ import {
 import { getDictionaries } from '../services/api'
 import { pad2 } from '../utils/sku'
 import useRevisionesUiState from './revisiones/hooks/useRevisionesUiState'
+import useRevisionesDataLoader from './revisiones/hooks/useRevisionesDataLoader'
+import useColaFilters from './revisiones/hooks/useColaFilters'
 import {
   badgeDecision,
   buildAttributeOptions,
@@ -37,9 +39,8 @@ import {
 import { AppAlert, EmptyState } from '../components/ui.jsx'
 import {
   // Revisiones
-  getRevisiones, decidirRevision,
-  importarMaestroJSON, getMissingMaestro,
-  getConfirmaciones, getConsolidacionCambios, cerrarCampania,
+  decidirRevision,
+  importarMaestroJSON, cerrarCampania,
   // Cola
   listarActualizaciones, exportActualizacionesCSV, aplicarActualizaciones,
   archivarActualizaciones, undoActualizacion, revertirActualizacion,
@@ -57,14 +58,6 @@ function descargarBlobDirecto(blob, nombre) {
   document.body.appendChild(a); a.click(); a.remove()
   URL.revokeObjectURL(url)
 }
-function getNewAttributeValue(item, field) {
-  const accepted = getAcceptedAttributeCode(item?.propuestas, field)
-  if (accepted) return accepted
-  if (field === 'categoria_cod') return item?.maestro?.categoria_cod || ''
-  if (field === 'tipo_cod') return item?.maestro?.tipo_cod || ''
-  return item?.maestro?.clasif_cod || ''
-}
-
 async function descargarBlobDesdeUrl(url, nombre) {
   const blob = await fetchAdminBlobByUrl(url)
   descargarBlobDirecto(blob, nombre)
@@ -96,103 +89,36 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     setCampaniaId(prev => (prev ? prev : String(campaniaIdDefault)))
   }, [campaniaIdDefault])
 
-  // ===== Carga datos =====
-  const cargar = useCallback(async () => {
-    // Tarjetas
-    const data = await getRevisiones({
-      campaniaId, sku, consenso, soloConDiferencias: String(soloDif)
-    })
-    setItems(data.items || [])
-
-    // Cola (server-side filters)
-    const arch =
-      colaArchivada === 'activas'    ? 'false' :
-      colaArchivada === 'archivadas' ? 'true'  : 'todas'
-    const acts = await listarActualizaciones(Number(campaniaId), {
-      estado: colaEstado || undefined,
-      archivada: arch,
-    })
-    setCola(acts.items || [])
-    // sanea selección (por si cambió la vista)
-    setSeleccion(sel => sel.filter(id => (acts.items || []).some(a => a.id === id)))
-  }, [campaniaId, colaArchivada, colaEstado, consenso, sku, soloDif])
-
-  const loadMissingItems = useCallback(async () => {
-    if (!authOK || !campaniaId) return
-    try {
-      setMissingLoading(true)
-      setMissingError('')
-      const data = await getMissingMaestro(Number(campaniaId))
-      setMissingItems(data.items || [])
-    } catch (e) {
-      setMissingError(e?.message || 'No se pudieron cargar los artículos faltantes en maestro.')
-    } finally {
-      setMissingLoading(false)
-    }
-  }, [authOK, campaniaId])
-
-  const loadConfirmaciones = useCallback(async () => {
-    if (!authOK || !campaniaId) return
-    try {
-      setConfirmLoading(true)
-      setConfirmError('')
-      const data = await getConfirmaciones(Number(campaniaId))
-      setConfirmItems(data.items || [])
-    } catch (e) {
-      setConfirmError(e?.message || 'No se pudieron cargar las confirmaciones.')
-    } finally {
-      setConfirmLoading(false)
-    }
-  }, [authOK, campaniaId])
-
-  const loadConsolidacion = useCallback(async () => {
-    if (!authOK || !campaniaId) return
-    try {
-      setConsolidateLoading(true)
-      setConsolidateError('')
-      const data = await getConsolidacionCambios(Number(campaniaId))
-      setConsolidateItems(data.items || [])
-    } catch (e) {
-      setConsolidateError(e?.message || 'No se pudieron cargar los cambios de consolidación.')
-    } finally {
-      setConsolidateLoading(false)
-    }
-  }, [authOK, campaniaId])
-
-  useEffect(() => {
-    if (!authOK || !campaniaId) return
-    cargar().catch(e => console.error('[Revisiones] cargar error', e))
-  }, [authOK, campaniaId, cargar])
-
-  useEffect(() => {
-    if (activeTab !== 'export') return
-    loadMissingItems()
-  }, [activeTab, loadMissingItems])
-
-  useEffect(() => {
-    if (activeTab !== 'confirm') return
-    loadConfirmaciones()
-  }, [activeTab, loadConfirmaciones])
-
-  useEffect(() => {
-    if (!confirmItems.length) return
-    setConfirmTargets((prev) => {
-      const next = { ...prev }
-      confirmItems.forEach((item) => {
-        if (next[item.sku] === undefined) next[item.sku] = 'consolidate'
-      })
-      return next
-    })
-  }, [confirmItems])
-
-  useEffect(() => {
-    if (activeTab !== 'consolidate') return
-    loadConsolidacion()
-  }, [activeTab, loadConsolidacion])
-
-  useEffect(() => () => {
-    if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
-  }, [])
+  const {
+    cargar,
+    loadMissingItems,
+    loadConfirmaciones,
+    loadConsolidacion,
+  } = useRevisionesDataLoader({
+    authOK,
+    campaniaId,
+    sku,
+    consenso,
+    soloDif,
+    colaArchivada,
+    colaEstado,
+    activeTab,
+    confirmItems,
+    messageTimeoutRef,
+    setItems,
+    setCola,
+    setSeleccion,
+    setMissingLoading,
+    setMissingError,
+    setMissingItems,
+    setConfirmLoading,
+    setConfirmError,
+    setConfirmItems,
+    setConsolidateLoading,
+    setConsolidateError,
+    setConsolidateItems,
+    setConfirmTargets,
+  })
 
   const evaluarItems = useMemo(() => (
     (items || [])
@@ -1044,33 +970,22 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     return true
   }, [filtroDecision])
 
-  // ===== Filtro por columnas (cola) =====
-  function incluye(v, term) {
-    return String(v || '').toLowerCase().includes(String(term || '').toLowerCase())
-  }
-  const filtroRow = useCallback((a) => {
-    if (colaEstado && a.estado !== colaEstado) return false
-    if (fEstado && a.estado !== fEstado) return false
-
-    if (fSKU && !incluye(a.sku, fSKU)) return false
-    if (fOldCat && !incluye(a.old_categoria_cod, fOldCat)) return false
-    if (fNewCat && !incluye(a.new_categoria_cod, fNewCat)) return false
-    if (fOldTipo && !incluye(a.old_tipo_cod, fOldTipo)) return false
-    if (fNewTipo && !incluye(a.new_tipo_cod, fNewTipo)) return false
-    if (fOldCla && !incluye(a.old_clasif_cod, fOldCla)) return false
-    if (fNewCla && !incluye(a.new_clasif_cod, fNewCla)) return false
-    if (fDecideBy && !incluye(a.decidedBy, fDecideBy)) return false
-    return true
-  }, [colaEstado, fDecideBy, fEstado, fNewCat, fNewCla, fNewTipo, fOldCat, fOldCla, fOldTipo, fSKU])
-  const colaFiltrada = useMemo(
-    () => (cola || []).filter(filtroRow),
-    [cola, filtroRow]
-  )
-  const allVisibleSelected = useMemo(() => {
-    const visibles = new Set(colaFiltrada.map(a => a.id))
-    if (!visibles.size) return false
-    return Array.from(visibles).every(id => seleccion.includes(id))
-  }, [colaFiltrada, seleccion])
+  const { colaFiltrada, allVisibleSelected } = useColaFilters({
+    cola,
+    colaEstado,
+    seleccion,
+    filters: {
+      fSKU,
+      fEstado,
+      fOldCat,
+      fNewCat,
+      fOldTipo,
+      fNewTipo,
+      fOldCla,
+      fNewCla,
+      fDecideBy,
+    },
+  })
 
   function limpiarFiltrosCola() {
     setFSKU(''); setFEstado(''); setFOldCat(''); setFNewCat('')
@@ -1860,7 +1775,6 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     </>
   )
 }
-
 
 
 
