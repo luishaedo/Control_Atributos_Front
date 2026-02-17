@@ -1,7 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Modal, Button, Form } from 'react-bootstrap'
 
-export default function IdentityModal({ show, initialEmail = '', initialSucursal = '', onSave, onClose }) {
+export default function IdentityModal({
+  show,
+  initialEmail = '',
+  initialSucursal = '',
+  onSave,
+  onClose,
+  requireCompletion = false,
+}) {
   const [email, setEmail] = useState(initialEmail)
   const [sucursal, setSucursal] = useState(initialSucursal)
 
@@ -19,9 +26,25 @@ export default function IdentityModal({ show, initialEmail = '', initialSucursal
     onSave?.({ email: email.trim(), sucursal: sucursal.trim() })
   }
 
+  const canClose = useMemo(
+    () => !requireCompletion || (Boolean(initialEmail.trim()) && Boolean(initialSucursal.trim())),
+    [requireCompletion, initialEmail, initialSucursal],
+  )
+
+  function handleHide() {
+    if (!canClose) return
+    onClose?.()
+  }
+
   return (
-    <Modal show={show} onHide={onClose} centered>
-      <Modal.Header closeButton>
+    <Modal
+      show={show}
+      onHide={handleHide}
+      centered
+      backdrop={canClose ? true : 'static'}
+      keyboard={canClose}
+    >
+      <Modal.Header closeButton={canClose}>
         <Modal.Title>Identificación</Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -50,9 +73,11 @@ export default function IdentityModal({ show, initialEmail = '', initialSucursal
         )}
       </Modal.Body>
       <Modal.Footer>
-        <Button variant="outline-secondary" onClick={onClose}>
-          Cancelar
-        </Button>
+        {canClose && (
+          <Button variant="outline-secondary" onClick={handleHide}>
+            Cancelar
+          </Button>
+        )}
         <Button variant="primary" onClick={handleSave} disabled={!isValid}>
           Guardar
         </Button>

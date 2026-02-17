@@ -11,6 +11,7 @@ export default function Home() {
   const [user, setUser] = useState(getStoredUser() || { email: '', sucursal: '' })
   const [campania, setCampania] = useState(null)
   const [showIdentityModal, setShowIdentityModal] = useState(!user?.email || !user?.sucursal)
+  const isIdentityRequired = !user?.email || !user?.sucursal
 
   function guardarIdentificacion(nuevo) {
     setUser(nuevo)
@@ -30,8 +31,10 @@ export default function Home() {
 
   return (
     <div>
-      <Topbar user={user} onChangeUser={cambiarIdentificacion} onClearUser={limpiarIdentificacion} />
-      <Container className="pb-4">
+      <div className={isIdentityRequired ? 'admin-content-locked' : ''}>
+        <Topbar user={user} onChangeUser={cambiarIdentificacion} onClearUser={limpiarIdentificacion} />
+      </div>
+      <Container className={`pb-4 ${isIdentityRequired ? 'admin-content-locked' : ''}`}>
         <CampaignSelector onSelect={setCampania} />
         {!campania?.activa && (
           <AppAlert
@@ -49,6 +52,7 @@ export default function Home() {
         initialSucursal={user?.sucursal || ''}
         onSave={guardarIdentificacion}
         onClose={() => setShowIdentityModal(false)}
+        requireCompletion={isIdentityRequired}
       />
     </div>
   )
