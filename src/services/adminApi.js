@@ -1,7 +1,7 @@
 // src/services/adminApi.js — versión completa y consistente
 import { pad2 } from "../utils/sku.js";
 import { API_BASE } from "./apiBase.js";
-import { fetchHttpBlob, fetchHttpJson } from "./httpClient.js";
+import { createHttpClient } from "./httpClient.js";
 
 // ===== Guards y utilidades comunes
 function assertHasCampaignId(campaniaId, ctx = "operación") {
@@ -32,20 +32,17 @@ function toAdminHttpError({ status, message }) {
   return new Error(message || `HTTP ${status}`);
 }
 
+const adminHttp = createHttpClient({
+  credentials: "include",
+  onHttpError: toAdminHttpError,
+});
+
 function fetchAuthJSON(path, options = {}) {
-  return fetchHttpJson(createAdminUrl(path), {
-    credentials: "include",
-    onHttpError: toAdminHttpError,
-    ...options,
-  });
+  return adminHttp.json(createAdminUrl(path), options);
 }
 
 function fetchAuthBlob(path, options = {}) {
-  return fetchHttpBlob(createAdminUrl(path), {
-    credentials: "include",
-    onHttpError: toAdminHttpError,
-    ...options,
-  });
+  return adminHttp.blob(createAdminUrl(path), options);
 }
 
 
@@ -364,10 +361,7 @@ export function exportSummaryTxt(campaniaId) {
 
 export function fetchAdminBlobByUrl(url) {
   const fullUrl = url.startsWith("http") ? url : `${API_BASE}${url}`;
-  return fetchHttpBlob(fullUrl, {
-    credentials: "include",
-    onHttpError: toAdminHttpError,
-  });
+  return adminHttp.blob(fullUrl);
 }
 
 function normalizeDictionaryPayload(payload) {

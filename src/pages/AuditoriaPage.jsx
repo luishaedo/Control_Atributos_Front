@@ -1,5 +1,5 @@
 ﻿import { useNavigate } from 'react-router-dom'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Modal } from 'react-bootstrap'
 import DiscrepanciasTabla from '../components/DiscrepanciasTabla'
 import DiscrepanciasSucursalesTabla from '../components/DiscrepanciasSucursalesTabla'
@@ -23,28 +23,28 @@ export default function AuditoriaPage() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [refreshBtnState, setRefreshBtnState] = useState('default')
 
-  function resetRefreshState(ms = 1800) {
+  const resetRefreshState = useCallback((ms = 1800) => {
     window.setTimeout(() => setRefreshBtnState('default'), ms)
-  }
+  }, [])
 
   const navigate = useNavigate()
 
-  // detectar campaña activa al montar
-  useEffect(() => {
-    (async () => {
-      try {
-        const list = await getCampaigns()
-        setCampanias(list || [])
-        const activa = (list || []).find(c => c.activa)
-        if (activa && !campaniaId) setCampaniaId(String(activa.id))
-      } catch (e) {
-        console.warn('No se pudo listar campañas', e)
-      }
-    })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fetchCampaigns = useCallback(async () => {
+    try {
+      const list = await getCampaigns()
+      setCampanias(list || [])
+      const activeCampaign = (list || []).find((campaign) => campaign.activa)
+      if (activeCampaign) setCampaniaId((prev) => prev || String(activeCampaign.id))
+    } catch (error) {
+      console.warn('No se pudo listar campañas', error)
+    }
   }, [])
 
-  async function fetchData() {
+  useEffect(() => {
+    fetchCampaigns()
+  }, [fetchCampaigns])
+
+  const fetchData = useCallback(async () => {
     if (!campaniaId) {
       setError(buildActionableError({
         what: 'No pudimos actualizar la auditoría.',
@@ -100,13 +100,12 @@ export default function AuditoriaPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [campaniaId, minSucursales, minVotos, resetRefreshState, sku])
 
   // si detectamos activa, precargar
   useEffect(() => {
     if (campaniaId) fetchData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaniaId])
+  }, [campaniaId, fetchData])
 
   const kpis = useMemo(() => {
     const discrepancias = (dataM || []).filter(it => {

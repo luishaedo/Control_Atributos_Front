@@ -79,7 +79,7 @@ export default function AdminPage() {
   useEffect(() => {
     loadCampaigns()
     loadPreview()
-  }, [])
+  }, [loadCampaigns, loadPreview])
 
   function saveIdentity(nextUser) {
     setUser(nextUser)

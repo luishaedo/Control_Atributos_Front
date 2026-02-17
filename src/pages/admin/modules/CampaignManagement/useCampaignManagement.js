@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { getCampaigns } from '../../../../services/api.js'
 import { crearCampania, actualizarCampania, activarCampania } from '../../../../services/adminApi.js'
 
@@ -17,7 +17,7 @@ export function useCampaignManagement({ setError }) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editCampaign, setEditCampaign] = useState(null)
 
-  async function loadCampaigns() {
+  const loadCampaigns = useCallback(async () => {
     try {
       const list = await getCampaigns()
       setCampaigns(list)
@@ -28,9 +28,9 @@ export function useCampaignManagement({ setError }) {
         console.warn('[admin] campaign load failed', error)
       }
     }
-  }
+  }, [setError])
 
-  async function createCampaign() {
+  const createCampaign = useCallback(async () => {
     try {
       setError(null)
       const response = await crearCampania({ ...newCampaign, activa: false })
@@ -40,16 +40,16 @@ export function useCampaignManagement({ setError }) {
     } catch (error) {
       setError(error.message || 'Error creando campaña')
     }
-  }
+  }, [loadCampaigns, newCampaign, setError])
 
-  async function activateCampaign(id) {
+  const activateCampaign = useCallback(async (id) => {
     try {
       await activarCampania(id)
       loadCampaigns()
     } catch (error) {
       setError(error.message || 'No se pudo activar')
     }
-  }
+  }, [loadCampaigns, setError])
 
   function openEditCampaign(campaign) {
     setEditCampaign({
@@ -64,7 +64,7 @@ export function useCampaignManagement({ setError }) {
     setShowEditModal(true)
   }
 
-  async function saveCampaignEdition() {
+  const saveCampaignEdition = useCallback(async () => {
     if (!editCampaign?.id) return
 
     try {
@@ -82,7 +82,7 @@ export function useCampaignManagement({ setError }) {
     } catch (error) {
       setError(error.message || 'No se pudo actualizar la campaña')
     }
-  }
+  }, [editCampaign, loadCampaigns, setError])
 
   return {
     campaigns,
