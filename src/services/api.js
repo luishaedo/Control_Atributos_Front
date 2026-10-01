@@ -1,4 +1,4 @@
-import { pad2 } from "../utils/sku.js";
+import { parseCode, parseSku } from "../utils/sku.js";
 import { API_BASE, API } from "./apiBase.js";
 import { fetchHttpJson } from "./httpClient.js";
 
@@ -68,8 +68,9 @@ export async function getCampaigns(opts = {}) {
 }
 
 export async function getMasterBySku(sku) {
-  const limpio = String(sku || "").trim().toUpperCase();
-  if (!limpio) throw new Error("SKU vacío");
+  const parsed = parseSku(sku);
+  if (!parsed.valid) throw new Error("SKU inválido");
+  const limpio = parsed.normalized;
 
   return fetchJSON(`/maestro/${encodeURIComponent(limpio)}`, {
     timeoutMs: MASTER_TIMEOUT_MS,
@@ -85,10 +86,11 @@ export async function getMasterBySku(sku) {
 }
 
 export async function getCampaignMasterBySku(campaniaId, sku) {
-  const limpio = String(sku || "").trim().toUpperCase();
+  const parsed = parseSku(sku);
+  const limpio = parsed.normalized;
   const id = Number(campaniaId || 0);
   if (!id) throw new Error("Campaña inválida");
-  if (!limpio) throw new Error("SKU vacío");
+  if (!parsed.valid) throw new Error("SKU inválido");
 
   return fetchJSON(`/campanias/${id}/maestro/${encodeURIComponent(limpio)}`, {
     timeoutMs: MASTER_TIMEOUT_MS,
@@ -113,30 +115,32 @@ export async function getMaestroList({ q = '', page = 1, pageSize = 50 } = {}) {
 }
 
 export async function saveScan({
-  email,
-  sucursal,
   campaniaId,
   skuRaw,
-  skuNormalized,
+  idempotencyKey,
   sugeridos = {},
 }) {
   const normalizeSuggestedCode = (value) => {
-    const trimmed = String(value || "").trim();
-    return trimmed ? pad2(trimmed) : "";
+    const trimmed = String(value ?? "").trim();
+    if (!trimmed) return "";
+    const parsed = parseCode(trimmed);
+    if (!parsed.valid) throw new Error("Los códigos deben tener uno o dos dígitos y no se truncarán");
+    return parsed.normalized;
   };
+  const parsedSku = parseSku(skuRaw);
+  if (!parsedSku.valid) throw new Error("SKU inválido");
   const body = {
-    email: String(email || '').trim(),
-    sucursal: String(sucursal || '').trim(),
     campaniaId: Number(campaniaId || 0),
     skuRaw: String(skuRaw || '').trim(),
-    skuNormalized: String(skuNormalized || '').trim(),
+    skuNormalized: parsedSku.normalized,
+    idempotencyKey: String(idempotencyKey || '').trim(),
     sugeridos: {
       categoria_cod: normalizeSuggestedCode(sugeridos.categoria_cod),
       tipo_cod: normalizeSuggestedCode(sugeridos.tipo_cod),
       clasif_cod: normalizeSuggestedCode(sugeridos.clasif_cod),
     },
   };
-  return fetchJSON(`/escaneos`, { method: "POST", body: JSON.stringify(body) });
+  return fetchJSON(`/escaneos`, { method: "POST", credentials: "include", body: JSON.stringify(body) });
 }
 
 export { API_BASE, API };

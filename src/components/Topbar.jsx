@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { AppIcon } from './ui.jsx'
 
 export default function Topbar({ user, onChangeUser, onClearUser }) {
+  const displayName = user?.nombre || user?.username || 'sin sesión'
+  const branch = user?.sucursal?.codigo || user?.sucursal?.nombre || 'sin sucursal'
   return (
     <Navbar bg="dark" data-bs-theme="dark" className="mb-3">
       <Container>
@@ -14,14 +16,14 @@ export default function Topbar({ user, onChangeUser, onClearUser }) {
         <div className="d-flex align-items-center gap-2">
           <Link to="/admin" className="btn btn-outline-warning btn-sm">Admin</Link>
           <span className="text-light small">
-            {user?.email || 'sin email'}
+            {displayName}
           </span>
-          <Badge bg="info">{user?.sucursal || 'sin sucursal'}</Badge>
+          <Badge bg="info">{branch}</Badge>
           <Button variant="outline-light" size="sm" onClick={onChangeUser}>
             Cambiar
           </Button>
           <Button variant="outline-danger" size="sm" onClick={onClearUser}>
-            Limpiar
+            Salir
           </Button>
         </div>
       </Container>

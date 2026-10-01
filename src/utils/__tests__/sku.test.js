@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { cleanSku, pad2 } from '../sku'
+import { cleanSku, pad2, parseCode, parseSku } from '../sku'
 
 describe('SKU utilities', () => {
-  it('normalizes alphanumeric values to uppercase', () => {
-    expect(cleanSku('abC123-extra')).toBe('ABC123')
+  it('separates # and $ suffixes and normalizes only the base', () => {
+    expect(parseSku(' abC123#etiqueta ')).toMatchObject({
+      valid: true, normalized: 'ABC123', separator: '#', suffix: 'etiqueta', hadSuffix: true,
+    })
+    expect(cleanSku('xy9$precio')).toBe('XY9')
   })
 
   it('returns an empty string when value is missing', () => {
@@ -14,7 +17,15 @@ describe('SKU utilities', () => {
     expect(pad2(7)).toBe('07')
   })
 
-  it('strips non-numeric characters before padding', () => {
-    expect(pad2('A-9')).toBe('09')
+  it('rejects SKU formats outside the agreed domain', () => {
+    expect(parseSku('ABC-123')).toMatchObject({ valid: false, normalized: '', reason: 'INVALID_FORMAT' })
+    expect(cleanSku('ABC 123')).toBe('')
+  })
+
+  it('rejects codes instead of stripping or truncating them', () => {
+    expect(parseCode('A-9')).toMatchObject({ valid: false, normalized: '' })
+    expect(parseCode('123')).toMatchObject({ valid: false, normalized: '' })
+    expect(pad2('A-9')).toBe('')
+    expect(pad2('123')).toBe('')
   })
 })

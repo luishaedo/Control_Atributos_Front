@@ -1743,9 +1743,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
               <p><strong>Actualizados:</strong> {closeSummary.updated}</p>
               <p><strong>Verificados:</strong> {closeSummary.verified}</p>
               <h6 className="mt-3">Estadísticas por usuario</h6>
-              {closeSummary.statsByUser?.length ? (
+              {closeSummary.statsByUserArray?.length ? (
                 <ul className="mb-0">
-                  {closeSummary.statsByUser.map((entry) => (
+                  {closeSummary.statsByUserArray.map((entry) => (
                     <li key={entry.user}>{entry.user}: {entry.count}</li>
                   ))}
                 </ul>

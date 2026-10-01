@@ -1,31 +1,57 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Container } from 'react-bootstrap'
 import Topbar from '../components/Topbar.jsx'
 import CampaignSelector from '../components/CampaignSelector.jsx'
 import ScanBox from '../components/ScanBox.jsx'
 import IdentityModal from '../components/IdentityModal.jsx'
 import { AppAlert } from '../components/ui.jsx'
-import { clearStoredUser, getStoredUser, setStoredUser } from '../utils/userStorage.js'
+import { getCurrentSession, loginSession, logoutSession } from '../services/sessionApi.js'
 
 export default function Home() {
-  const [user, setUser] = useState(getStoredUser() || { email: '', sucursal: '' })
+  const [user, setUser] = useState(null)
   const [campania, setCampania] = useState(null)
-  const [showIdentityModal, setShowIdentityModal] = useState(!user?.email || !user?.sucursal)
-  const isIdentityRequired = !user?.email || !user?.sucursal
+  const [showIdentityModal, setShowIdentityModal] = useState(true)
+  const [loginError, setLoginError] = useState('')
+  const [loginBusy, setLoginBusy] = useState(false)
+  const isIdentityRequired = !user
 
-  function guardarIdentificacion(nuevo) {
-    setUser(nuevo)
-    setStoredUser(nuevo)
-    setShowIdentityModal(false)
+  useEffect(() => {
+    getCurrentSession()
+      .then((session) => {
+        setUser(session?.user || null)
+        setShowIdentityModal(!session?.user)
+      })
+      .catch(() => {
+        setUser(null)
+        setShowIdentityModal(true)
+      })
+  }, [])
+
+  async function guardarIdentificacion(credentials) {
+    try {
+      setLoginBusy(true)
+      setLoginError('')
+      const session = await loginSession(credentials)
+      setUser(session?.user || null)
+      setShowIdentityModal(!session?.user)
+    } catch (error) {
+      setLoginError(error?.message || 'No se pudo iniciar sesión')
+    } finally {
+      setLoginBusy(false)
+    }
   }
 
   function cambiarIdentificacion() {
     setShowIdentityModal(true)
   }
 
-  function limpiarIdentificacion() {
-    clearStoredUser()
-    setUser({ email: '', sucursal: '' })
+  async function limpiarIdentificacion() {
+    try {
+      await logoutSession()
+    } catch {
+      // La sesión local se limpia igual aunque el backend no responda.
+    }
+    setUser(null)
     setShowIdentityModal(true)
   }
 
@@ -44,12 +70,13 @@ export default function Home() {
             actionHint="Seleccioná y activá una campaña para comenzar a escanear."
           />
         )}
-        <ScanBox user={user} campania={campania} />
+        <ScanBox campania={campania} />
       </Container>
       <IdentityModal
         show={showIdentityModal}
-        initialEmail={user?.email || ''}
-        initialSucursal={user?.sucursal || ''}
+        initialUsername={user?.username || ''}
+        error={loginError}
+        busy={loginBusy}
         onSave={guardarIdentificacion}
         onClose={() => setShowIdentityModal(false)}
         requireCompletion={isIdentityRequired}

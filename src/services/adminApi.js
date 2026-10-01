@@ -1,5 +1,5 @@
 // src/services/adminApi.js — versión completa y consistente
-import { pad2 } from "../utils/sku.js";
+import { parseCode } from "../utils/sku.js";
 import { API_BASE } from "./apiBase.js";
 import { createHttpClient } from "./httpClient.js";
 
@@ -51,10 +51,16 @@ export function adminPing() {
   return fetchAuthJSON("/api/admin/ping");
 }
 
-export function adminLogin(token) {
+export function adminLogin(credentials = {}) {
+  const body = typeof credentials === "string"
+    ? { token: String(credentials || "") }
+    : {
+        username: String(credentials.username || "").trim(),
+        password: String(credentials.password || ""),
+      };
   return fetchAuthJSON("/api/admin/login", {
     method: "POST",
-    body: JSON.stringify({ token: String(token || "") }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -367,10 +373,11 @@ export function fetchAdminBlobByUrl(url) {
 function normalizeDictionaryPayload(payload) {
   const data = payload || {};
   const normalizeList = (list) =>
-    (list || []).map((item) => ({
-      ...item,
-      cod: pad2(item?.cod),
-    }));
+    (list || []).map((item) => {
+      const parsed = parseCode(item?.cod);
+      if (!parsed.valid) throw new Error("Los códigos de diccionario deben tener uno o dos dígitos");
+      return { ...item, cod: parsed.normalized };
+    });
 
   return {
     categorias: normalizeList(data.categorias),

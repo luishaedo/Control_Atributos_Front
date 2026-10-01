@@ -3,32 +3,33 @@ import { Modal, Button, Form } from 'react-bootstrap'
 
 export default function IdentityModal({
   show,
-  initialEmail = '',
-  initialSucursal = '',
+  initialUsername = '',
+  error = '',
+  busy = false,
   onSave,
   onClose,
   requireCompletion = false,
 }) {
-  const [email, setEmail] = useState(initialEmail)
-  const [sucursal, setSucursal] = useState(initialSucursal)
+  const [username, setUsername] = useState(initialUsername)
+  const [password, setPassword] = useState('')
 
   useEffect(() => {
     if (show) {
-      setEmail(initialEmail)
-      setSucursal(initialSucursal)
+      setUsername(initialUsername)
+      setPassword('')
     }
-  }, [show, initialEmail, initialSucursal])
+  }, [show, initialUsername])
 
-  const isValid = Boolean(email.trim()) && Boolean(sucursal.trim())
+  const isValid = Boolean(username.trim()) && Boolean(password)
 
   function handleSave() {
-    if (!isValid) return
-    onSave?.({ email: email.trim(), sucursal: sucursal.trim() })
+    if (!isValid || busy) return
+    onSave?.({ username: username.trim(), password })
   }
 
   const canClose = useMemo(
-    () => !requireCompletion || (Boolean(initialEmail.trim()) && Boolean(initialSucursal.trim())),
-    [requireCompletion, initialEmail, initialSucursal],
+    () => !requireCompletion,
+    [requireCompletion],
   )
 
   function handleHide() {
@@ -45,30 +46,36 @@ export default function IdentityModal({
       keyboard={canClose}
     >
       <Modal.Header closeButton={canClose}>
-        <Modal.Title>Identificación</Modal.Title>
+        <Modal.Title>Iniciar sesión</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <Form.Group className="mb-3">
-          <Form.Label>Nombre</Form.Label>
+          <Form.Label>Usuario</Form.Label>
           <Form.Control
             type="text"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="Ej: Juan Pérez"
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            placeholder="Usuario"
             autoFocus
+            autoComplete="username"
+            disabled={busy}
           />
         </Form.Group>
         <Form.Group>
-          <Form.Label>Sucursal</Form.Label>
+          <Form.Label>Contraseña</Form.Label>
           <Form.Control
-            value={sucursal}
-            onChange={e => setSucursal(e.target.value)}
-            placeholder="Sucursal"
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="Contraseña"
+            autoComplete="current-password"
+            disabled={busy}
           />
         </Form.Group>
+        {error && <div className="text-danger small mt-2">{error}</div>}
         {!isValid && (
           <div className="text-muted small mt-2">
-            Completá ambos campos para continuar.
+            Completá usuario y contraseña para continuar.
           </div>
         )}
       </Modal.Body>
@@ -79,7 +86,7 @@ export default function IdentityModal({
           </Button>
         )}
         <Button variant="primary" onClick={handleSave} disabled={!isValid}>
-          Guardar
+          {busy ? 'Ingresando...' : 'Ingresar'}
         </Button>
       </Modal.Footer>
     </Modal>

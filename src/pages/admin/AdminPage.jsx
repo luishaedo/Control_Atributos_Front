@@ -2,14 +2,12 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Container } from 'react-bootstrap'
 import Topbar from '../../components/Topbar.jsx'
-import IdentityModal from '../../components/IdentityModal.jsx'
 import {
   exportMaestroCSV,
   exportCategoriasCSV,
   exportTiposCSV,
   exportClasifCSV,
 } from '../../services/adminApi.js'
-import { clearUserFromLocalStorage, getUserFromLocalStorage, setUserInLocalStorage } from './shared/adminStorage.js'
 import { useAdminAuth } from './modules/AdminAuth/useAdminAuth.js'
 import AdminAuthPanel from './modules/AdminAuth/AdminAuthPanel.jsx'
 import { useCampaignManagement } from './modules/CampaignManagement/useCampaignManagement.js'
@@ -24,16 +22,16 @@ import RevisionesPanel from './modules/Revisiones/RevisionesPanel.jsx'
 export default function AdminPage() {
   const navigate = useNavigate()
   const [activeAdminTab, setActiveAdminTab] = useState('revisiones')
-  const [showIdentityModal, setShowIdentityModal] = useState(false)
-  const [user, setUser] = useState(getUserFromLocalStorage() || { email: 'admin@local', sucursal: 'Admin' })
 
   const {
-    token,
-    setToken,
+    credentials,
+    setCredentials,
+    user,
     authOK,
     error,
     setError,
     login,
+    logout,
   } = useAdminAuth()
 
   const {
@@ -81,12 +79,6 @@ export default function AdminPage() {
     loadPreview()
   }, [loadCampaigns, loadPreview])
 
-  function saveIdentity(nextUser) {
-    setUser(nextUser)
-    setUserInLocalStorage(nextUser)
-    setShowIdentityModal(false)
-  }
-
   function downloadBlobDirect(blob, fileName) {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -111,21 +103,19 @@ export default function AdminPage() {
     <div>
       <Topbar
         user={user}
-        onChangeUser={() => setShowIdentityModal(true)}
-        onClearUser={() => {
-          clearUserFromLocalStorage()
-          setUser({ email: '', sucursal: '' })
-          setShowIdentityModal(true)
-        }}
+        onChangeUser={() => {}}
+        onClearUser={logout}
       />
 
       <Container className="pb-5 u-section-stack">
         <AdminAuthPanel
-          token={token}
+          credentials={credentials}
           authOK={authOK}
           error={error}
-          onTokenChange={setToken}
+          user={user}
+          onCredentialsChange={setCredentials}
           onSubmit={login}
+          onLogout={logout}
         />
 
         <div className={!authOK ? 'admin-content-locked' : ''}>
@@ -205,14 +195,6 @@ export default function AdminPage() {
         onClose={() => setShowEditModal(false)}
         onChange={setEditCampaign}
         onSave={saveCampaignEdition}
-      />
-
-      <IdentityModal
-        show={showIdentityModal}
-        initialEmail={user?.email || ''}
-        initialSucursal={user?.sucursal || ''}
-        onSave={saveIdentity}
-        onClose={() => setShowIdentityModal(false)}
       />
     </div>
   )

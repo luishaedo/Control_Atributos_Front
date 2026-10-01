@@ -60,7 +60,10 @@ export function useImports({ setError, refreshPreview }) {
       setError(null)
       setImportMessage('')
       const response = await uploadMaestro({ maestro: masterFile })
-      setImportMessage(`Se cargó archivo maestro con ${response.count} registros`)
+      const suffixNotice = response.warningCount
+        ? `. Aviso: ${response.warningCount} SKU(s) tenían sufijo #/$; se importó únicamente la base informada por la respuesta`
+        : ''
+      setImportMessage(`Se cargó archivo maestro con ${response.count} registros${suffixNotice}`)
       setMasterUploadButtonState('success')
       resetButtonState(setMasterUploadButtonState)
       refreshPreview()

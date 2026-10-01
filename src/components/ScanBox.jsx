@@ -3,13 +3,14 @@ import { Card, Form, Row, Col } from 'react-bootstrap'
 import StatusBadge from './StatusBadge.jsx'
 import SuggestionForm from './SuggestionForm.jsx'
 import { AppAlert, AppButton, AppIcon } from './ui.jsx'
-import { cleanSku, pad2 } from '../utils/sku.js'
+import { parseSku, pad2 } from '../utils/sku.js'
 import { getDictionaries, getMasterBySku, getCampaignMasterBySku, saveScan } from '../services/api.js'
 import { getNombre } from '../utils/texto.js'
 import { hasValidCode } from '../utils/revisionesHelpers.jsx'
 import { buildActionableError } from '../utils/uiFeedback.js'
+import { createScanAttemptTracker } from '../utils/scanIdempotency.js'
 
-export default function ScanBox({ user, campania }) {
+export default function ScanBox({ campania }) {
   const [dic, setDic] = useState(null)
   const [skuRaw, setSkuRaw] = useState('')
   const [sku, setSku] = useState('')
@@ -17,12 +18,14 @@ export default function ScanBox({ user, campania }) {
   const [sugeridos, setSugeridos] = useState({})
   const [guardadoInfo, setGuardadoInfo] = useState(null)
   const [error, setError] = useState('')
+  const [skuNotice, setSkuNotice] = useState(null)
   const [processButtonState, setProcessButtonState] = useState('default')
   const [saveButtonState, setSaveButtonState] = useState('default')
   const [validatedSku, setValidatedSku] = useState('')
   const inputRef = useRef(null)
+  const scanAttemptRef = useRef(createScanAttemptTracker())
   const canScan = Boolean(campania?.activa)
-  const currentCleanSku = cleanSku(skuRaw)
+  const currentCleanSku = parseSku(skuRaw).normalized
   const hasDirtySkuAfterValidation = Boolean(resultado && validatedSku && currentCleanSku !== validatedSku)
 
   useEffect(() => {
@@ -45,6 +48,8 @@ export default function ScanBox({ user, campania }) {
     setProcessButtonState('default')
     setSaveButtonState('default')
     setValidatedSku('')
+    setSkuNotice(null)
+    scanAttemptRef.current.reset()
   }, [campania?.id])
 
   function resetButtonState(setter, ms = 1800) {
@@ -70,10 +75,20 @@ export default function ScanBox({ user, campania }) {
       return
     }
 
-    const limpio = cleanSku(skuRaw)
+    const parsedSku = parseSku(skuRaw)
+    const limpio = parsedSku.normalized
     setSku(limpio)
     setValidatedSku('')
-    if (!limpio) {
+    setSkuNotice(parsedSku.hadSuffix && parsedSku.valid ? {
+      separator: parsedSku.separator,
+      skuNormalized: parsedSku.normalized,
+    } : null)
+    if (!parsedSku.valid) {
+      setError(buildActionableError({
+        what: 'No pudimos validar el SKU.',
+        why: 'La base debe contener solo letras y números.',
+        how: 'Corregí el valor. Solo # o $ pueden iniciar un sufijo de etiqueta.',
+      }))
       setProcessButtonState('default')
       return
     }
@@ -166,16 +181,19 @@ export default function ScanBox({ user, campania }) {
     }
 
     let response = null
+    const scanPayload = {
+      campaniaId: campania?.id,
+      skuRaw,
+      skuNormalized: sku,
+      sugeridos,
+    }
+    const idempotencyKey = scanAttemptRef.current.keyFor(scanPayload)
     try {
       setSaveButtonState('loading')
       setError('')
       response = await saveScan({
-        email: user?.email,
-        sucursal: user?.sucursal,
-        campaniaId: campania?.id,
-        skuRaw,
-        skuNormalized: sku,
-        sugeridos,
+        ...scanPayload,
+        idempotencyKey,
       })
     } catch (e) {
       setError(buildActionableError({
@@ -188,6 +206,8 @@ export default function ScanBox({ user, campania }) {
       return
     }
 
+    scanAttemptRef.current.complete(idempotencyKey)
+
     setGuardadoInfo({
       sku,
       at: new Date(),
@@ -199,6 +219,7 @@ export default function ScanBox({ user, campania }) {
     setValidatedSku('')
     setSugeridos({})
     setResultado(null)
+    setSkuNotice(null)
     setSaveButtonState('success')
     resetButtonState(setSaveButtonState)
     inputRef.current?.focus()
@@ -241,10 +262,12 @@ export default function ScanBox({ user, campania }) {
                 <Form.Label>Artículo</Form.Label>
                 <Form.Control
                   inputMode="text"
-                  pattern="^[A-Za-z0-9]+([#$].*)?$"
                   placeholder="Ej: THJ00406207 o ABC123#loquesea"
                   value={skuRaw}
-                  onChange={(e) => setSkuRaw(e.target.value)}
+                  onChange={(e) => {
+                    setSkuRaw(e.target.value)
+                    setSkuNotice(null)
+                  }}
                   ref={inputRef}
                   autoFocus
                   required
@@ -275,6 +298,16 @@ export default function ScanBox({ user, campania }) {
             </Col>
           </Row>
         </Form>
+
+        {skuNotice && (
+          <AppAlert
+            variant="warning"
+            className="mt-3"
+            title="Sufijo de etiqueta detectado"
+            message={`Se usará el SKU base ${skuNotice.skuNormalized}. El contenido iniciado por ${skuNotice.separator} no forma parte de la identidad del artículo.`}
+            actionHint="Confirmá el SKU base antes de guardar."
+          />
+        )}
 
         {error && (
           <AppAlert
