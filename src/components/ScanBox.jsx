@@ -23,6 +23,7 @@ export default function ScanBox({ campania }) {
   const [saveButtonState, setSaveButtonState] = useState('default')
   const [validatedSku, setValidatedSku] = useState('')
   const inputRef = useRef(null)
+  const lookupSeqRef = useRef(0)
   const scanAttemptRef = useRef(createScanAttemptTracker())
   const canScan = Boolean(campania?.activa)
   const currentCleanSku = parseSku(skuRaw).normalized
@@ -41,6 +42,7 @@ export default function ScanBox({ campania }) {
   }, [])
 
   useEffect(() => {
+    lookupSeqRef.current += 1
     setResultado(null)
     setSugeridos({})
     setSku('')
@@ -50,6 +52,7 @@ export default function ScanBox({ campania }) {
     setValidatedSku('')
     setSkuNotice(null)
     scanAttemptRef.current.reset()
+    window.setTimeout(() => inputRef.current?.focus(), 0)
   }, [campania?.id])
 
   function resetButtonState(setter, ms = 1800) {
@@ -66,6 +69,8 @@ export default function ScanBox({ campania }) {
 
   async function procesar(e) {
     e.preventDefault()
+    const requestSeq = lookupSeqRef.current + 1
+    lookupSeqRef.current = requestSeq
     setProcessButtonState('loading')
     setGuardadoInfo(null)
     setError('')
@@ -99,6 +104,7 @@ export default function ScanBox({ campania }) {
         ? await getCampaignMasterBySku(campania.id, limpio)
         : await getMasterBySku(limpio)
     } catch (e) {
+      if (lookupSeqRef.current !== requestSeq) return
       setError(buildActionableError({
         what: 'No pudimos consultar el SKU en el maestro.',
         why: e?.message || 'La consulta falló o el servicio no respondió.',
@@ -109,6 +115,7 @@ export default function ScanBox({ campania }) {
       resetButtonState(setProcessButtonState, 2200)
       return
     }
+    if (lookupSeqRef.current !== requestSeq) return
 
     if (!maestro) {
       setResultado({ estado: 'NO_MAESTRO', maestro: null, asumidos: null })
@@ -136,7 +143,7 @@ export default function ScanBox({ campania }) {
 
     if (!campania?.id) {
       setError(buildActionableError({
-        what: 'No pudimos guardar cambios.',
+        what: 'No pudimos registrar la observación.',
         why: 'No hay campaña activa seleccionada.',
         how: 'Seleccioná una campaña activa y reintentá.',
       }))
@@ -146,7 +153,7 @@ export default function ScanBox({ campania }) {
     if (resultado.estado === 'NO_MAESTRO') {
       if (!dic) {
         setError(buildActionableError({
-          what: 'No pudimos guardar cambios.',
+          what: 'No pudimos registrar la observación.',
           why: 'Los diccionarios todavía se están cargando.',
           how: 'Esperá unos segundos y reintentá.',
         }))
@@ -157,7 +164,7 @@ export default function ScanBox({ campania }) {
       const faltan = req.filter((k) => !sugeridos?.[k])
       if (faltan.length) {
         setError(buildActionableError({
-          what: 'No pudimos guardar cambios.',
+          what: 'No pudimos registrar la observación.',
           why: 'Faltan códigos obligatorios.',
           how: 'Completá Categoría/Tipo/Clasificación y reintentá.',
         }))
@@ -172,7 +179,7 @@ export default function ScanBox({ campania }) {
 
       if (invalidCodes.some(Boolean)) {
         setError(buildActionableError({
-          what: 'No pudimos guardar cambios.',
+          what: 'No pudimos registrar la observación.',
           why: 'Hay códigos que no existen en diccionarios.',
           how: 'Revisá Categoría/Tipo/Clasificación y usá códigos válidos.',
         }))
@@ -197,7 +204,7 @@ export default function ScanBox({ campania }) {
       })
     } catch (e) {
       setError(buildActionableError({
-        what: 'No pudimos guardar cambios.',
+        what: 'No pudimos registrar la observación.',
         why: e?.message || 'El servidor rechazó la operación.',
         how: 'Validá los datos y reintentá.',
       }))
@@ -226,7 +233,6 @@ export default function ScanBox({ campania }) {
   }
 
   function atributoCard(nombre, maestroValor, asumidoValor, arr) {
-    const mNombre = maestroValor ? getNombre(arr, maestroValor) : '—'
     const aNombre = asumidoValor ? getNombre(arr, asumidoValor) : '—'
     const same = maestroValor && asumidoValor && pad2(maestroValor) === pad2(asumidoValor)
 
@@ -290,7 +296,7 @@ export default function ScanBox({ campania }) {
                   className="btn btn-success"
                   state={!resultado || !campania?.id || !canScan || hasDirtySkuAfterValidation ? 'disabled' : saveButtonState}
                   onClick={guardarYContinuar}
-                  label="Aplicar cambios y continuar"
+                  label="Registrar observación"
                   loadingLabel="Guardando…"
                 successLabel="Guardado"
                 errorLabel="Error al guardar"
@@ -313,7 +319,7 @@ export default function ScanBox({ campania }) {
           <AppAlert
             variant="danger"
             className="mt-3"
-            title="No se pudieron aplicar cambios"
+            title="No se pudo registrar la observación"
             message={error}
             actionHint="Revisá los datos del SKU, corregí campos obligatorios y volvé a intentar."
           />
@@ -323,8 +329,8 @@ export default function ScanBox({ campania }) {
           <AppAlert
             variant="success"
             className="mt-3"
-            title={`Se aplicaron cambios al SKU ${guardadoInfo.sku}`}
-            message={`Actualizado el ${guardadoInfo.at.toLocaleString()} · Cambios aplicados: 1`}
+            title={`Observación registrada para ${guardadoInfo.sku}`}
+            message={`Registrado el ${guardadoInfo.at.toLocaleString()}`}
             actionHint="Continuá con el siguiente SKU o revisá el historial en Revisiones."
           >
             {guardadoInfo.skuType === 'UNKNOWN' && guardadoInfo.unknown && (

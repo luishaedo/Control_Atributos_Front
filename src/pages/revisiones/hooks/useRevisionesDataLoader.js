@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import {
   getRevisiones,
   getMissingMaestro,
@@ -32,13 +32,22 @@ export default function useRevisionesDataLoader({
   setConsolidateItems,
   setConfirmTargets,
 }) {
+  const mainLoadSeqRef = useRef(0)
+  const missingSeqRef = useRef(0)
+  const confirmSeqRef = useRef(0)
+  const consolidateSeqRef = useRef(0)
+
   const cargar = useCallback(async () => {
+    const requestSeq = mainLoadSeqRef.current + 1
+    mainLoadSeqRef.current = requestSeq
+
     const data = await getRevisiones({
       campaniaId,
       sku,
       consenso,
       soloConDiferencias: String(soloDif),
     })
+    if (mainLoadSeqRef.current !== requestSeq) return
     setItems(data.items || [])
 
     const archivada =
@@ -50,6 +59,7 @@ export default function useRevisionesDataLoader({
       estado: colaEstado || undefined,
       archivada,
     })
+    if (mainLoadSeqRef.current !== requestSeq) return
 
     setCola(acts.items || [])
     setSeleccion((sel) => sel.filter((id) => (acts.items || []).some((item) => item.id === id)))
@@ -57,43 +67,58 @@ export default function useRevisionesDataLoader({
 
   const loadMissingItems = useCallback(async () => {
     if (!authOK || !campaniaId) return
+    const requestSeq = missingSeqRef.current + 1
+    missingSeqRef.current = requestSeq
+
     try {
       setMissingLoading(true)
       setMissingError('')
       const data = await getMissingMaestro(Number(campaniaId))
+      if (missingSeqRef.current !== requestSeq) return
       setMissingItems(data.items || [])
     } catch (error) {
-      setMissingError(error?.message || 'No se pudieron cargar los artículos faltantes en maestro.')
+      if (missingSeqRef.current !== requestSeq) return
+      setMissingError(error?.message || 'No se pudieron cargar los articulos faltantes en maestro.')
     } finally {
-      setMissingLoading(false)
+      if (missingSeqRef.current === requestSeq) setMissingLoading(false)
     }
   }, [authOK, campaniaId, setMissingError, setMissingItems, setMissingLoading])
 
   const loadConfirmaciones = useCallback(async () => {
     if (!authOK || !campaniaId) return
+    const requestSeq = confirmSeqRef.current + 1
+    confirmSeqRef.current = requestSeq
+
     try {
       setConfirmLoading(true)
       setConfirmError('')
       const data = await getConfirmaciones(Number(campaniaId))
+      if (confirmSeqRef.current !== requestSeq) return
       setConfirmItems(data.items || [])
     } catch (error) {
+      if (confirmSeqRef.current !== requestSeq) return
       setConfirmError(error?.message || 'No se pudieron cargar las confirmaciones.')
     } finally {
-      setConfirmLoading(false)
+      if (confirmSeqRef.current === requestSeq) setConfirmLoading(false)
     }
   }, [authOK, campaniaId, setConfirmError, setConfirmItems, setConfirmLoading])
 
   const loadConsolidacion = useCallback(async () => {
     if (!authOK || !campaniaId) return
+    const requestSeq = consolidateSeqRef.current + 1
+    consolidateSeqRef.current = requestSeq
+
     try {
       setConsolidateLoading(true)
       setConsolidateError('')
       const data = await getConsolidacionCambios(Number(campaniaId))
+      if (consolidateSeqRef.current !== requestSeq) return
       setConsolidateItems(data.items || [])
     } catch (error) {
-      setConsolidateError(error?.message || 'No se pudieron cargar los cambios de consolidación.')
+      if (consolidateSeqRef.current !== requestSeq) return
+      setConsolidateError(error?.message || 'No se pudieron cargar los cambios de consolidacion.')
     } finally {
-      setConsolidateLoading(false)
+      if (consolidateSeqRef.current === requestSeq) setConsolidateLoading(false)
     }
   }, [authOK, campaniaId, setConsolidateError, setConsolidateItems, setConsolidateLoading])
 
