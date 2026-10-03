@@ -1,6 +1,7 @@
 import React from 'react'
-import { Card, Row, Col, Form, Spinner } from 'react-bootstrap'
+import { Card, Row, Col, Form, Spinner, Button } from 'react-bootstrap'
 import { AppAlert, AppButton } from '../../../../components/ui.jsx'
+import ImportOmissions from './ImportOmissions.jsx'
 
 export default function ImportsPanel({
   authOK,
@@ -14,6 +15,8 @@ export default function ImportsPanel({
   onImportMaster,
   masterUploadButtonState,
   importMessage,
+  omittedRows,
+  onImportOmittedRow,
 }) {
   return (
     <Card className="mb-3">
@@ -22,6 +25,11 @@ export default function ImportsPanel({
         <Row className="g-3">
           <Col md={6}>
             <div className="mb-2 fw-semibold">Diccionarios</div>
+            <div className="d-flex flex-wrap gap-2 mb-3">
+              <Button size="sm" variant="outline-primary" href="/templates/plantilla-categorias.csv" download>Plantilla categorías</Button>
+              <Button size="sm" variant="outline-primary" href="/templates/plantilla-tipos.csv" download>Plantilla tipos</Button>
+              <Button size="sm" variant="outline-primary" href="/templates/plantilla-clasificaciones.csv" download>Plantilla clasificaciones</Button>
+            </div>
 
             <Form.Group className="mb-2">
               <Form.Label>Categorías (CSV)</Form.Label>
@@ -67,6 +75,9 @@ export default function ImportsPanel({
 
           <Col md={6}>
             <div className="mb-2 fw-semibold">Maestro</div>
+            <div className="mb-3">
+              <Button size="sm" variant="outline-primary" href="/templates/plantilla-maestro.csv" download>Descargar plantilla maestro</Button>
+            </div>
 
             <Form.Group className="mb-3">
               <Form.Label>Archivo maestro (CSV)</Form.Label>
@@ -108,13 +119,15 @@ export default function ImportsPanel({
           />
         )}
 
+        <ImportOmissions omittedRows={omittedRows} onImportRow={onImportOmittedRow} />
+
         <div className="mt-3 small text-muted">
-          <div>Encabezados esperados:</div>
+          <div>Encabezados de las plantillas descargables:</div>
           <ul className="mb-0">
-            <li>Diccionarios: <code>Código,Descripción</code></li>
-            <li>Maestro: <code>Código,Descripción,Categoría,Tipo,Clasificación</code></li>
+            <li>Diccionarios: <code>cod,nombre</code></li>
+            <li>Maestro: <code>sku,descripcion,categoria_cod,tipo_cod,clasif_cod</code></li>
           </ul>
-          <div>Los códigos 1..9 se normalizan automáticamente a 2 dígitos (01..09).</div>
+          <div>Los códigos 1..9 se normalizan a dos dígitos (01..09). Las filas inválidas se omiten y se informan individualmente.</div>
         </div>
       </Card.Body>
     </Card>
