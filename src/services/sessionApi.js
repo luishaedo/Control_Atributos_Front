@@ -27,3 +27,10 @@ export function loginSession({ username, password } = {}) {
 export function logoutSession() {
   return sessionHttp.json(api('/session/logout'), { method: 'POST' })
 }
+
+export function changeOwnPassword({ currentPassword, newPassword }) {
+  return sessionHttp.json(api('/session/password'), {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+}

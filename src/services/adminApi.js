@@ -68,6 +68,15 @@ export function adminLogout() {
   return fetchAuthJSON("/api/admin/logout", { method: "POST" });
 }
 
+// ======================= Administración de cuentas
+export const listarSucursales = () => fetchAuthJSON('/api/admin/sucursales');
+export const crearSucursal = (data) => fetchAuthJSON('/api/admin/sucursales', { method: 'POST', body: JSON.stringify(data) });
+export const actualizarSucursal = (id, data) => fetchAuthJSON(`/api/admin/sucursales/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) });
+export const listarUsuarios = () => fetchAuthJSON('/api/admin/usuarios');
+export const crearUsuario = (data) => fetchAuthJSON('/api/admin/usuarios', { method: 'POST', body: JSON.stringify(data) });
+export const actualizarUsuario = (id, data) => fetchAuthJSON(`/api/admin/usuarios/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) });
+export const listarAuditoriaCuentas = () => fetchAuthJSON('/api/admin/cuentas/auditoria');
+
 // ======================= Importadores JSON (si tu back los expone por JSON)
 export function importarDiccionariosJSON(payload) {
   const normalized = normalizeDictionaryPayload(payload);
