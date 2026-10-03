@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Button, ButtonGroup, Badge, Stack, Spinner } from 'react-bootstrap'
+import { Card, Button, Badge, Stack, Spinner } from 'react-bootstrap'
 import { getCampaigns, getDictionaries } from '../services/api.js'
 import { getNombre } from '../utils/texto.js'
 import { EmptyState } from './ui.jsx'
@@ -23,13 +23,14 @@ function formatCampaignRange(start, end) {
   return `${formatCampaignDate(start)} → ${formatCampaignDate(end)}`
 }
 
-export default function CampaignSelector({ onSelect }) {
+export default function CampaignSelector({ onSelect, onStatusChange }) {
   const navigate = useNavigate()
   const [listado, setListado] = useState([])
   const [dic, setDic] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [dictionaryWarning, setDictionaryWarning] = useState(null)
+  const [retryKey, setRetryKey] = useState(0)
   const activa = listado.find((c) => c.activa)
   const [selectedId, setSelectedId] = useState(null)
   const seleccionada = listado.find((c) => c.id === selectedId) || null
@@ -68,11 +69,13 @@ export default function CampaignSelector({ onSelect }) {
     async function cargar() {
       try {
         setLoading(true)
+        onStatusChange?.('loading')
         setError(null)
         setDictionaryWarning(null)
         const camps = await loadCampaigns()
         if (abortController.signal.aborted) return
         setListado(camps || [])
+        onStatusChange?.('ready')
         const saved = Number(localStorage.getItem(LS_KEY) || 0)
         const savedObj = (camps || []).find((c) => c.id === saved && c.activa) || null
         const elegida = savedObj || (camps || []).find((c) => c.activa) || null
@@ -82,6 +85,9 @@ export default function CampaignSelector({ onSelect }) {
         loadDictionariesInBackground()
       } catch (e) {
         if (abortController.signal.aborted) return
+        setListado([])
+        setSelectedId(null)
+        onStatusChange?.('error')
         setError(buildActionableError({
           what: 'No pudimos cargar las campañas.',
           why: e?.message || 'Falló la carga inicial de campañas.',
@@ -97,7 +103,7 @@ export default function CampaignSelector({ onSelect }) {
     return () => {
       abortController.abort()
     }
-  }, [])
+  }, [retryKey, onStatusChange])
 
   useEffect(() => {
     if (!listado.length || !selectedId) {
@@ -126,14 +132,14 @@ export default function CampaignSelector({ onSelect }) {
       chips.push(<Badge key="clasif" bg="info">Clasif {c.clasif_objetivo_cod} - {nombre}</Badge>)
     }
     if (chips.length === 0) chips.push(<Badge key="none" bg="dark">Sin filtros</Badge>)
-    return <Stack direction="horizontal" gap={2}>{chips}</Stack>
+    return <Stack direction="horizontal" gap={2} className="flex-wrap">{chips}</Stack>
   }
 
   return (
-    <Card className="u-mb-16">
-      <Card.Header className="d-flex justify-content-between align-items-center">
-        <strong>Campañas</strong>
-        <ButtonGroup>
+    <Card className="u-mb-16 app-surface">
+      <Card.Header className="campaign-header">
+        <div><div className="app-eyebrow">Contexto de trabajo</div><strong>Campañas</strong></div>
+        <div className="campaign-options" role="group" aria-label="Seleccionar campaña">
           {listado.map((c) => (
             <Button
               key={c.id}
@@ -146,10 +152,10 @@ export default function CampaignSelector({ onSelect }) {
               {c.activa ? <Badge bg="light" text="dark">Activa</Badge> : <Badge bg="secondary">Inactiva</Badge>}
             </Button>
           ))}
-        </ButtonGroup>
+        </div>
       </Card.Header>
       <Card.Body>
-        {error && <div className="alert alert-danger mb-2">{error}</div>}
+        {error && <div className="alert alert-danger mb-2" role="alert">{error}<div className="mt-2"><Button size="sm" variant="outline-danger" onClick={() => setRetryKey(k => k + 1)}>Reintentar carga</Button></div></div>}
         {dictionaryWarning && !error && <div className="alert alert-warning mb-2">{dictionaryWarning}</div>}
         {loading && (
           <div className="d-flex align-items-center gap-2 text-muted">
@@ -158,7 +164,7 @@ export default function CampaignSelector({ onSelect }) {
           </div>
         )}
 
-        {!loading && listado.length === 0 && (
+        {!loading && !error && listado.length === 0 && (
           <EmptyState
             title="No hay campañas disponibles"
             subtitle="Todavía no existe una campaña activa para operar."

@@ -10,6 +10,7 @@ import { getCurrentSession, loginSession, logoutSession } from '../services/sess
 export default function Home() {
   const [user, setUser] = useState(null)
   const [campania, setCampania] = useState(null)
+  const [campaignStatus, setCampaignStatus] = useState('loading')
   const [showIdentityModal, setShowIdentityModal] = useState(true)
   const [loginError, setLoginError] = useState('')
   const [loginBusy, setLoginBusy] = useState(false)
@@ -61,8 +62,8 @@ export default function Home() {
         <Topbar user={user} onChangeUser={cambiarIdentificacion} onClearUser={limpiarIdentificacion} />
       </div>
       <Container className={`pb-4 ${isIdentityRequired ? 'admin-content-locked' : ''}`}>
-        <CampaignSelector onSelect={setCampania} />
-        {!campania?.activa && (
+        <CampaignSelector onSelect={setCampania} onStatusChange={setCampaignStatus} />
+        {campaignStatus === 'ready' && campania && !campania.activa && (
           <AppAlert
             variant="warning"
             title="Campaña no activa"
@@ -70,7 +71,7 @@ export default function Home() {
             actionHint="Seleccioná y activá una campaña para comenzar a escanear."
           />
         )}
-        <ScanBox campania={campania} />
+        {campaignStatus === 'ready' && campania?.activa && <ScanBox campania={campania} />}
       </Container>
       <IdentityModal
         show={showIdentityModal}

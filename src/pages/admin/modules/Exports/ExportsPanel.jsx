@@ -38,7 +38,7 @@ export default function ExportsPanel({
           <Row className="g-3">
             <Col md={4}>
               <div className="fw-semibold mb-2">Categorías</div>
-              <Table size="sm" bordered hover>
+              <Table responsive size="sm" bordered hover>
                 <thead><tr><th>Cod</th><th>Nombre</th></tr></thead>
                 <tbody>
                   {(dictionaryPreview?.categorias || []).map((item) => (
@@ -49,7 +49,7 @@ export default function ExportsPanel({
             </Col>
             <Col md={4}>
               <div className="fw-semibold mb-2">Tipos</div>
-              <Table size="sm" bordered hover>
+              <Table responsive size="sm" bordered hover>
                 <thead><tr><th>Cod</th><th>Nombre</th></tr></thead>
                 <tbody>
                   {(dictionaryPreview?.tipos || []).map((item) => (
@@ -60,7 +60,7 @@ export default function ExportsPanel({
             </Col>
             <Col md={4}>
               <div className="fw-semibold mb-2">Clasif</div>
-              <Table size="sm" bordered hover>
+              <Table responsive size="sm" bordered hover>
                 <thead><tr><th>Cod</th><th>Nombre</th></tr></thead>
                 <tbody>
                   {(dictionaryPreview?.clasif || []).map((item) => (
@@ -81,6 +81,7 @@ export default function ExportsPanel({
             </Button>
             <div className="text-muted small">Total: {masterPreview.total}</div>
             <Form.Control
+              aria-label="Buscar SKU o descripción en el maestro"
               size="sm"
               placeholder="Buscar SKU o descripción"
               value={masterQuery}
@@ -91,7 +92,7 @@ export default function ExportsPanel({
               style={{ maxWidth: 260 }}
             />
           </div>
-          <Table size="sm" bordered hover>
+          <Table responsive size="sm" bordered hover>
             <thead>
               <tr>
                 <th>SKU</th>

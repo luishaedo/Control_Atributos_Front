@@ -4,6 +4,7 @@ import { Row, Col, Card, Form, Button } from 'react-bootstrap'
 export default function CampaignManagementPanel({
   authOK,
   campaigns,
+  campaignMessage,
   newCampaign,
   onNewCampaignChange,
   onCreateCampaign,
@@ -13,9 +14,10 @@ export default function CampaignManagementPanel({
 }) {
   return (
     <Row className="g-3">
+      {campaignMessage && <Col xs={12}><div className="alert alert-success mb-0" role="status">{campaignMessage}</div></Col>}
       <Col md={6}>
-        <Card>
-          <Card.Header>Crear campaña</Card.Header>
+        <Card className="app-surface h-100">
+          <Card.Header><div className="app-eyebrow">Nueva</div><strong>Crear campaña</strong></Card.Header>
           <Card.Body>
             <Form className="row g-2">
               <div className="col-12">
@@ -43,7 +45,7 @@ export default function CampaignManagementPanel({
                 <Form.Control value={newCampaign.clasif_objetivo_cod} onChange={(e) => onNewCampaignChange({ ...newCampaign, clasif_objetivo_cod: e.target.value })} />
               </div>
             </Form>
-            <div className="mt-3 d-flex gap-2">
+            <div className="mt-3 app-actions">
               <Button onClick={onCreateCampaign} disabled={!authOK}>Crear</Button>
               <Button variant="secondary" onClick={onRefreshCampaigns}>Refrescar</Button>
             </div>
@@ -52,17 +54,18 @@ export default function CampaignManagementPanel({
       </Col>
 
       <Col md={6}>
-        <Card>
-          <Card.Header>Campañas existentes</Card.Header>
+        <Card className="app-surface h-100">
+          <Card.Header><div className="app-eyebrow">Listado</div><strong>Campañas existentes</strong></Card.Header>
           <Card.Body>
+            {!campaigns.length && <p className="text-muted mb-0">Todavía no hay campañas para mostrar.</p>}
             {campaigns.map((campaign) => (
-              <div key={campaign.id} className="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
-                <div>
+              <div key={campaign.id} className="campaign-list-item">
+                <div className="campaign-list-item__info">
                   <div className="fw-bold">{campaign.nombre} {campaign.activa ? '✅' : ''}</div>
                   <small className="text-muted">{campaign.inicia} → {campaign.termina}</small>
                   <div><small>Filtros: {campaign.categoria_objetivo_cod || '—'} / {campaign.tipo_objetivo_cod || '—'} / {campaign.clasif_objetivo_cod || '—'}</small></div>
                 </div>
-                <div className="d-flex gap-2">
+                <div className="app-actions">
                   <Button
                     size="sm"
                     variant="outline-primary"

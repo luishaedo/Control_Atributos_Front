@@ -1,31 +1,29 @@
 import React from 'react'
 import { Navbar, Container, Badge, Button } from 'react-bootstrap'
-import { Link } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { AppIcon } from './ui.jsx'
 
 export default function Topbar({ user, onChangeUser, onClearUser }) {
-  const displayName = user?.nombre || user?.username || 'sin sesión'
-  const branch = user?.sucursal?.codigo || user?.sucursal?.nombre || 'sin sucursal'
+  const displayName = user?.nombre || user?.username || ''
+  const branch = user?.sucursal?.codigo || user?.sucursal?.nombre || ''
   return (
-    <Navbar bg="dark" data-bs-theme="dark" className="mb-3">
-      <Container>
-        <Navbar.Brand as={Link} to="/" className="d-inline-flex align-items-center gap-2 app-section-title">
-          <AppIcon name="flask" size={18} />
+    <Navbar className="app-topbar mb-4">
+      <Container className="app-topbar__inner">
+        <Navbar.Brand as={Link} to="/" className="app-brand">
+          <span className="app-brand__mark"><AppIcon name="flask" size={19} /></span>
           <span>Control de Atributos</span>
         </Navbar.Brand>
-        <div className="d-flex align-items-center gap-2">
-          <Link to="/admin" className="btn btn-outline-warning btn-sm">Admin</Link>
-          <span className="text-light small">
-            {displayName}
-          </span>
-          <Badge bg="info">{branch}</Badge>
-          <Button variant="outline-light" size="sm" onClick={onChangeUser}>
-            Cambiar
-          </Button>
-          <Button variant="outline-danger" size="sm" onClick={onClearUser}>
-            Salir
-          </Button>
-        </div>
+        <nav className="app-topbar__links" aria-label="Navegación principal">
+          <NavLink to="/" end className={({ isActive }) => `app-topbar__link ${isActive ? 'app-topbar__link--active' : ''}`}>Escaneo</NavLink>
+          <NavLink to="/catalogo" className={({ isActive }) => `app-topbar__link ${isActive ? 'app-topbar__link--active' : ''}`}>Catálogo</NavLink>
+          <NavLink to="/admin" className={({ isActive }) => `app-topbar__link ${isActive ? 'app-topbar__link--active' : ''}`}>Administración</NavLink>
+        </nav>
+        {user && <div className="app-topbar__account">
+          <span className="app-topbar__user" title={displayName}>{displayName}</span>
+          {branch && <Badge bg="light" text="dark">{branch}</Badge>}
+          {onChangeUser && onChangeUser !== onClearUser && <Button variant="outline-secondary" size="sm" onClick={onChangeUser}>Cambiar</Button>}
+          <Button variant="outline-secondary" size="sm" onClick={onClearUser}>Salir</Button>
+        </div>}
       </Container>
     </Navbar>
   )

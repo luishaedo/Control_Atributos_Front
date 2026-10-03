@@ -31,8 +31,8 @@ export default function DiscrepanciasSucursalesTabla({ data = [], loading }) {
     <div className="card">
       <div className="card-header d-flex flex-wrap align-items-center gap-2">
         <strong>Entre Sucursales</strong>
-        <div className="ms-auto d-flex gap-2">
-          <input value={buscar} onChange={e=>setBuscar(e.target.value)} placeholder="Buscar SKU" className="form-control form-control-sm" style={{ maxWidth: 200 }}/>
+        <div className="audit-table-tools">
+          <input aria-label="Buscar SKU entre sucursales" value={buscar} onChange={e=>setBuscar(e.target.value)} placeholder="Buscar SKU" className="form-control form-control-sm" />
           <div className="form-check form-switch">
             <input className="form-check-input" type="checkbox" id="soloConf2" checked={soloConflicto} onChange={e=>setSoloConflicto(e.target.checked)} />
             <label className="form-check-label" htmlFor="soloConf2">Sólo con conflicto</label>
