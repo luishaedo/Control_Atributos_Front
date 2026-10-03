@@ -24,6 +24,8 @@ export default function AccountsPanel() {
   const [branch, setBranch] = useState(emptyBranch)
   const [account, setAccount] = useState(emptyUser)
   const [accountConfirmation, setAccountConfirmation] = useState('')
+  const [branchEdit, setBranchEdit] = useState(null)
+  const [userEdit, setUserEdit] = useState(null)
   const [resetId, setResetId] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [resetConfirmation, setResetConfirmation] = useState('')
@@ -80,15 +82,35 @@ export default function AccountsPanel() {
   }
 
   function editBranch(item) {
-    const nombre = window.prompt('Nombre de la sucursal', item.nombre)
-    if (nombre === null || !nombre.trim()) return
-    run(() => actualizarSucursal(item.id, { nombre: nombre.trim() }), 'Sucursal actualizada')
+    setBranchEdit({ id: item.id, nombre: item.nombre })
+    setUserEdit(null)
+    setError('')
   }
 
   function editUser(item) {
-    const nombre = window.prompt('Nombre visible', item.nombre)
-    if (nombre === null || !nombre.trim()) return
-    run(() => actualizarUsuario(item.id, { nombre: nombre.trim() }), 'Usuario actualizado')
+    setUserEdit({ id: item.id, username: item.username, nombre: item.nombre })
+    setBranchEdit(null)
+    setError('')
+  }
+
+  function saveBranchEdit(event) {
+    event.preventDefault()
+    const nombre = branchEdit.nombre.trim()
+    if (!nombre) return setError('Ingresá un nombre de sucursal')
+    run(async () => {
+      await actualizarSucursal(branchEdit.id, { nombre })
+      setBranchEdit(null)
+    }, 'Sucursal actualizada')
+  }
+
+  function saveUserEdit(event) {
+    event.preventDefault()
+    const nombre = userEdit.nombre.trim()
+    if (!nombre) return setError('Ingresá un nombre de usuario')
+    run(async () => {
+      await actualizarUsuario(userEdit.id, { nombre })
+      setUserEdit(null)
+    }, 'Usuario actualizado')
   }
 
   function toggleBranch(item) {
@@ -126,6 +148,7 @@ export default function AccountsPanel() {
         <div className="col-12 col-md-3 d-flex align-items-end"><Button type="submit" disabled={busy} className="w-100">Crear sucursal</Button></div>
       </Form>
       <div className="table-responsive"><Table striped hover><thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{branches.map((item) => <tr key={item.id}><td>{item.codigo}</td><td>{item.nombre}</td><td>{item.activa ? 'Activa' : 'Inactiva'}</td><td className="d-flex flex-wrap gap-2"><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => editBranch(item)}>Editar</Button><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => toggleBranch(item)}>{item.activa ? 'Desactivar' : 'Activar'}</Button></td></tr>)}</tbody></Table></div>
+      {branchEdit && <Form onSubmit={saveBranchEdit} className="border rounded p-3 mt-3"><h4 className="h6">Editar sucursal</h4><Form.Group controlId="branch-edit-name"><Form.Label>Nuevo nombre de sucursal</Form.Label><Form.Control required value={branchEdit.nombre} disabled={busy} onChange={(event) => setBranchEdit({ ...branchEdit, nombre: event.target.value })} /></Form.Group><div className="d-flex gap-2 mt-2"><Button type="submit" disabled={busy}>Guardar sucursal</Button><Button type="button" variant="outline-secondary" disabled={busy} onClick={() => setBranchEdit(null)}>Cancelar</Button></div></Form>}
     </Card.Body></Card>
     <Card className="app-surface"><Card.Body>
       <h3 className="h5">Usuarios</h3>
@@ -139,6 +162,7 @@ export default function AccountsPanel() {
         <div className="col-12 col-md-2 d-flex align-items-end"><Button type="submit" disabled={busy} className="w-100">Crear usuario</Button></div>
       </Form>
         <div className="table-responsive"><Table striped hover><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Sucursal</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{users.map((item) => <tr key={item.id}><td>{item.username}</td><td>{item.nombre}</td><td><Form.Select aria-label={`Rol de ${item.username}`} size="sm" value={item.rol} disabled={busy} onChange={(e) => run(() => actualizarUsuario(item.id, { rol: e.target.value }), 'Rol actualizado')}><option value="OPERADOR">Operador</option><option value="REVISOR">Revisor</option><option value="ADMIN">Administrador</option></Form.Select></td><td><Form.Select aria-label={`Sucursal de ${item.username}`} size="sm" value={item.sucursal?.id || ''} disabled={busy} onChange={(e) => run(() => actualizarUsuario(item.id, { sucursalId: e.target.value || null }), 'Sucursal asignada')}><option value="">Sin sucursal</option>{branches.filter((branchItem) => branchItem.activa || branchItem.id === item.sucursal?.id).map((branchItem) => <option value={branchItem.id} key={branchItem.id}>{branchItem.nombre}</option>)}</Form.Select></td><td>{item.activo ? 'Activo' : 'Inactivo'}</td><td className="d-flex flex-wrap gap-2"><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => editUser(item)}>Editar</Button><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => toggleUser(item)}>{item.activo ? 'Desactivar' : 'Activar'}</Button><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => { setResetId(item.id); setNewPassword(''); setResetConfirmation('') }}>Restablecer clave</Button></td></tr>)}</tbody></Table></div>
+      {userEdit && <Form onSubmit={saveUserEdit} className="border rounded p-3 mt-3"><h4 className="h6">Editar usuario {userEdit.username}</h4><Form.Group controlId="user-edit-name"><Form.Label>Nuevo nombre del usuario</Form.Label><Form.Control required value={userEdit.nombre} disabled={busy} onChange={(event) => setUserEdit({ ...userEdit, nombre: event.target.value })} /></Form.Group><div className="d-flex gap-2 mt-2"><Button type="submit" disabled={busy}>Guardar usuario</Button><Button type="button" variant="outline-secondary" disabled={busy} onClick={() => setUserEdit(null)}>Cancelar</Button></div></Form>}
       {resetId && <Form onSubmit={resetPassword} className="border rounded p-3 mt-3"><h4 className="h6">Restablecer contraseña de {users.find((item) => item.id === resetId)?.username}</h4><Form.Group controlId="reset-password"><Form.Label>Nueva contraseña</Form.Label><Form.Control required minLength={8} type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></Form.Group><Form.Group controlId="reset-password-confirmation" className="mt-2"><Form.Label>Confirmar nueva contraseña</Form.Label><Form.Control required minLength={8} type="password" autoComplete="new-password" value={resetConfirmation} onChange={(e) => setResetConfirmation(e.target.value)} /></Form.Group><div className="d-flex gap-2 mt-2"><Button type="submit" disabled={busy}>Guardar y cerrar sesiones</Button><Button type="button" variant="outline-secondary" onClick={() => { setResetId(''); setNewPassword(''); setResetConfirmation('') }}>Cancelar</Button></div></Form>}
     </Card.Body></Card>
     <Card className="app-surface"><Card.Body>

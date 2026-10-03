@@ -26,6 +26,41 @@ it('muestra la actividad sin exponer la contraseña', async () => {
   expect(screen.getByText('admin')).toBeInTheDocument()
 })
 
+it('edita el nombre de una sucursal desde el formulario y envía el valor recortado', async () => {
+  const prompt = vi.spyOn(window, 'prompt')
+  render(<AccountsPanel />)
+  fireEvent.click((await screen.findAllByRole('button', { name: 'Editar' }))[0])
+  fireEvent.change(screen.getByLabelText('Nuevo nombre de sucursal'), { target: { value: ' Centro Norte ' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar sucursal' }))
+  await waitFor(() => expect(api.actualizarSucursal).toHaveBeenCalledWith('s1', { nombre: 'Centro Norte' }))
+  await waitFor(() => expect(screen.queryByLabelText('Nuevo nombre de sucursal')).not.toBeInTheDocument())
+  expect(prompt).not.toHaveBeenCalled()
+  vi.restoreAllMocks()
+})
+
+it('permite cancelar la edición de usuario y rechaza un nombre vacío', async () => {
+  render(<AccountsPanel />)
+  fireEvent.click((await screen.findAllByRole('button', { name: 'Editar' }))[1])
+  expect(screen.getByLabelText('Nuevo nombre del usuario')).toHaveValue('Ana')
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+  expect(api.actualizarUsuario).not.toHaveBeenCalled()
+  fireEvent.click(screen.getAllByRole('button', { name: 'Editar' })[1])
+  fireEvent.change(screen.getByLabelText('Nuevo nombre del usuario'), { target: { value: '   ' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar usuario' }))
+  expect(await screen.findByText('Ingresá un nombre de usuario')).toBeInTheDocument()
+  expect(api.actualizarUsuario).not.toHaveBeenCalled()
+})
+
+it('conserva el formulario de edición si el servidor rechaza el nombre', async () => {
+  api.actualizarUsuario.mockRejectedValueOnce(new Error('Nombre no permitido'))
+  render(<AccountsPanel />)
+  fireEvent.click((await screen.findAllByRole('button', { name: 'Editar' }))[1])
+  fireEvent.change(screen.getByLabelText('Nuevo nombre del usuario'), { target: { value: 'Nombre propuesto' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar usuario' }))
+  expect(await screen.findByText('Nombre no permitido')).toBeInTheDocument()
+  expect(screen.getByLabelText('Nuevo nombre del usuario')).toHaveValue('Nombre propuesto')
+})
+
 it('informa que el cambio se guardó si la sesión se revoca antes de recargar', async () => {
   api.listarAuditoriaCuentas.mockResolvedValueOnce({ items: [] }).mockRejectedValueOnce(new Error('No autorizado'))
   render(<AccountsPanel />)
