@@ -1,9 +1,13 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Navbar, Container, Badge, Button } from 'react-bootstrap'
 import { Link, NavLink } from 'react-router-dom'
 import { AppIcon } from './ui.jsx'
+import ChangePasswordModal from './ChangePasswordModal.jsx'
 
 export default function Topbar({ user, onChangeUser, onClearUser }) {
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const mustChangePassword = Boolean(user?.mustChangePassword)
+  useEffect(() => { if (mustChangePassword) setShowPasswordModal(true) }, [mustChangePassword])
   const displayName = user?.nombre || user?.username || ''
   const branch = user?.sucursal?.codigo || user?.sucursal?.nombre || ''
   return (
@@ -22,9 +26,11 @@ export default function Topbar({ user, onChangeUser, onClearUser }) {
           <span className="app-topbar__user" title={displayName}>{displayName}</span>
           {branch && <Badge bg="light" text="dark">{branch}</Badge>}
           {onChangeUser && onChangeUser !== onClearUser && <Button variant="outline-secondary" size="sm" onClick={onChangeUser}>Cambiar</Button>}
+          <Button variant="outline-secondary" size="sm" onClick={() => setShowPasswordModal(true)}>Cambiar clave</Button>
           <Button variant="outline-secondary" size="sm" onClick={onClearUser}>Salir</Button>
         </div>}
       </Container>
+      <ChangePasswordModal show={showPasswordModal} required={mustChangePassword} onHide={() => setShowPasswordModal(false)} onChanged={() => window.location.reload()} />
     </Navbar>
   )
 }

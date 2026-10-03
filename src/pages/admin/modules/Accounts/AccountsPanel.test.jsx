@@ -1,0 +1,45 @@
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import AccountsPanel from './AccountsPanel.jsx'
+import * as api from '../../../../services/adminApi.js'
+
+vi.mock('../../../../services/adminApi.js', () => ({
+  listarSucursales: vi.fn(), crearSucursal: vi.fn(), actualizarSucursal: vi.fn(),
+  listarUsuarios: vi.fn(), crearUsuario: vi.fn(), actualizarUsuario: vi.fn(), listarAuditoriaCuentas: vi.fn(),
+}))
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  api.listarSucursales.mockResolvedValue({ items: [{ id: 's1', codigo: 'CENTRO', nombre: 'Centro', activa: true }] })
+  api.listarUsuarios.mockResolvedValue({ items: [{ id: 'u1', username: 'ana', nombre: 'Ana', rol: 'OPERADOR', activo: true, sucursal: { id: 's1' } }] })
+  api.listarAuditoriaCuentas.mockResolvedValue({ items: [{ id: 'a1', entidad: 'USUARIO', entidadId: 'u1', actor: 'admin', createdAt: '2026-10-03T12:00:00.000Z', cambios: { passwordReset: true } }] })
+  api.actualizarUsuario.mockResolvedValue({ ok: true })
+})
+
+afterEach(() => cleanup())
+
+it('muestra la actividad sin exponer la contraseña', async () => {
+  render(<AccountsPanel />)
+  expect(await screen.findByText('Contraseña restablecida')).toBeInTheDocument()
+  expect(screen.getByText('admin')).toBeInTheDocument()
+})
+
+it('informa que el cambio se guardó si la sesión se revoca antes de recargar', async () => {
+  api.listarAuditoriaCuentas.mockResolvedValueOnce({ items: [] }).mockRejectedValueOnce(new Error('No autorizado'))
+  render(<AccountsPanel />)
+  fireEvent.change(await screen.findByLabelText('Rol de ana'), { target: { value: 'REVISOR' } })
+  expect(await screen.findByText(/Rol actualizado\. Si se cerró tu sesión/)).toBeInTheDocument()
+  expect(api.actualizarUsuario).toHaveBeenCalledWith('u1', { rol: 'REVISOR' })
+})
+
+it('restablece la contraseña de la cuenta elegida tras confirmar y limpia el campo', async () => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<AccountsPanel />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Restablecer clave' }))
+  fireEvent.change(screen.getByLabelText('Nueva contraseña'), { target: { value: 'nuevaClave123' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar y cerrar sesiones' }))
+  await waitFor(() => expect(api.actualizarUsuario).toHaveBeenCalledWith('u1', { password: 'nuevaClave123' }))
+  await waitFor(() => expect(screen.queryByText('Restablecer contraseña de ana')).not.toBeInTheDocument())
+  expect(screen.queryByDisplayValue('nuevaClave123')).not.toBeInTheDocument()
+  vi.restoreAllMocks()
+})

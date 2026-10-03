@@ -18,6 +18,7 @@ import ImportsPanel from './modules/Imports/ImportsPanel.jsx'
 import { useExports } from './modules/Exports/useExports.js'
 import ExportsPanel from './modules/Exports/ExportsPanel.jsx'
 import RevisionesPanel from './modules/Revisiones/RevisionesPanel.jsx'
+import AccountsPanel from './modules/Accounts/AccountsPanel.jsx'
 
 export default function AdminPage() {
   const navigate = useNavigate()
@@ -129,10 +130,12 @@ export default function AdminPage() {
             <Button variant={activeAdminTab === 'revisiones' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('revisiones')} aria-current={activeAdminTab === 'revisiones' ? 'page' : undefined}>Revisiones</Button>
             <Button variant={activeAdminTab === 'campanias' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('campanias')} aria-current={activeAdminTab === 'campanias' ? 'page' : undefined}>Campañas</Button>
             <Button variant={activeAdminTab === 'import' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('import')} aria-current={activeAdminTab === 'import' ? 'page' : undefined}>Maestro e importaciones</Button>
+            {user?.rol === 'ADMIN' && <Button variant={activeAdminTab === 'cuentas' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('cuentas')} aria-current={activeAdminTab === 'cuentas' ? 'page' : undefined}>Cuentas</Button>}
             <Button variant="outline-secondary" onClick={() => navigate('/auditoria')}>Auditoría</Button>
           </div>
 
           {activeAdminTab === 'revisiones' && <RevisionesPanel campaigns={campaigns} authOK={authOK} />}
+          {activeAdminTab === 'cuentas' && user?.rol === 'ADMIN' && <AccountsPanel />}
 
           {activeAdminTab === 'import' && (
             <>
