@@ -23,8 +23,10 @@ export default function AccountsPanel() {
   const [audit, setAudit] = useState([])
   const [branch, setBranch] = useState(emptyBranch)
   const [account, setAccount] = useState(emptyUser)
+  const [accountConfirmation, setAccountConfirmation] = useState('')
   const [resetId, setResetId] = useState('')
   const [newPassword, setNewPassword] = useState('')
+  const [resetConfirmation, setResetConfirmation] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -69,9 +71,11 @@ export default function AccountsPanel() {
 
   function submitUser(event) {
     event.preventDefault()
+    if (account.password !== accountConfirmation) return setError('La confirmación no coincide con la contraseña inicial')
     run(async () => {
       await crearUsuario({ ...account, username: account.username.trim(), nombre: account.nombre.trim(), sucursalId: account.sucursalId || null })
       setAccount(emptyUser)
+      setAccountConfirmation('')
     }, 'Usuario creado')
   }
 
@@ -100,10 +104,12 @@ export default function AccountsPanel() {
   function resetPassword(event) {
     event.preventDefault()
     if (newPassword.length < 8) return setError('La contraseña debe tener al menos 8 caracteres')
+    if (newPassword !== resetConfirmation) return setError('La confirmación no coincide con la nueva contraseña')
     if (!window.confirm('Se cerrarán todas las sesiones de este usuario. ¿Restablecer la contraseña?')) return
     run(async () => {
       await actualizarUsuario(resetId, { password: newPassword })
       setNewPassword('')
+      setResetConfirmation('')
       setResetId('')
     }, 'Contraseña restablecida; sesiones revocadas')
   }
@@ -129,10 +135,11 @@ export default function AccountsPanel() {
         <Form.Group controlId="user-role" className="col-12 col-md-2"><Form.Label>Rol</Form.Label><Form.Select value={account.rol} onChange={(e) => setAccount({ ...account, rol: e.target.value })}><option value="OPERADOR">Operador</option><option value="REVISOR">Revisor</option><option value="ADMIN">Administrador</option></Form.Select></Form.Group>
         <Form.Group controlId="user-branch" className="col-12 col-md-2"><Form.Label>Sucursal</Form.Label><Form.Select required={account.rol === 'OPERADOR'} value={account.sucursalId} onChange={(e) => setAccount({ ...account, sucursalId: e.target.value })}><option value="">Seleccionar</option>{branches.filter((item) => item.activa).map((item) => <option value={item.id} key={item.id}>{item.nombre}</option>)}</Form.Select></Form.Group>
         <Form.Group controlId="user-password" className="col-12 col-md-2"><Form.Label>Contraseña inicial</Form.Label><Form.Control required minLength={8} type="password" autoComplete="new-password" value={account.password} onChange={(e) => setAccount({ ...account, password: e.target.value })} /></Form.Group>
+        <Form.Group controlId="user-password-confirmation" className="col-12 col-md-2"><Form.Label>Confirmar contraseña inicial</Form.Label><Form.Control required minLength={8} type="password" autoComplete="new-password" value={accountConfirmation} onChange={(e) => setAccountConfirmation(e.target.value)} /></Form.Group>
         <div className="col-12 col-md-2 d-flex align-items-end"><Button type="submit" disabled={busy} className="w-100">Crear usuario</Button></div>
       </Form>
-        <div className="table-responsive"><Table striped hover><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Sucursal</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{users.map((item) => <tr key={item.id}><td>{item.username}</td><td>{item.nombre}</td><td><Form.Select aria-label={`Rol de ${item.username}`} size="sm" value={item.rol} disabled={busy} onChange={(e) => run(() => actualizarUsuario(item.id, { rol: e.target.value }), 'Rol actualizado')}><option value="OPERADOR">Operador</option><option value="REVISOR">Revisor</option><option value="ADMIN">Administrador</option></Form.Select></td><td><Form.Select aria-label={`Sucursal de ${item.username}`} size="sm" value={item.sucursal?.id || ''} disabled={busy} onChange={(e) => run(() => actualizarUsuario(item.id, { sucursalId: e.target.value || null }), 'Sucursal asignada')}><option value="">Sin sucursal</option>{branches.filter((branchItem) => branchItem.activa || branchItem.id === item.sucursal?.id).map((branchItem) => <option value={branchItem.id} key={branchItem.id}>{branchItem.nombre}</option>)}</Form.Select></td><td>{item.activo ? 'Activo' : 'Inactivo'}</td><td className="d-flex flex-wrap gap-2"><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => editUser(item)}>Editar</Button><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => toggleUser(item)}>{item.activo ? 'Desactivar' : 'Activar'}</Button><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => { setResetId(item.id); setNewPassword('') }}>Restablecer clave</Button></td></tr>)}</tbody></Table></div>
-      {resetId && <Form onSubmit={resetPassword} className="border rounded p-3 mt-3"><h4 className="h6">Restablecer contraseña de {users.find((item) => item.id === resetId)?.username}</h4><Form.Group controlId="reset-password"><Form.Label>Nueva contraseña</Form.Label><Form.Control required minLength={8} type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></Form.Group><div className="d-flex gap-2 mt-2"><Button type="submit" disabled={busy}>Guardar y cerrar sesiones</Button><Button type="button" variant="outline-secondary" onClick={() => { setResetId(''); setNewPassword('') }}>Cancelar</Button></div></Form>}
+        <div className="table-responsive"><Table striped hover><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Sucursal</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{users.map((item) => <tr key={item.id}><td>{item.username}</td><td>{item.nombre}</td><td><Form.Select aria-label={`Rol de ${item.username}`} size="sm" value={item.rol} disabled={busy} onChange={(e) => run(() => actualizarUsuario(item.id, { rol: e.target.value }), 'Rol actualizado')}><option value="OPERADOR">Operador</option><option value="REVISOR">Revisor</option><option value="ADMIN">Administrador</option></Form.Select></td><td><Form.Select aria-label={`Sucursal de ${item.username}`} size="sm" value={item.sucursal?.id || ''} disabled={busy} onChange={(e) => run(() => actualizarUsuario(item.id, { sucursalId: e.target.value || null }), 'Sucursal asignada')}><option value="">Sin sucursal</option>{branches.filter((branchItem) => branchItem.activa || branchItem.id === item.sucursal?.id).map((branchItem) => <option value={branchItem.id} key={branchItem.id}>{branchItem.nombre}</option>)}</Form.Select></td><td>{item.activo ? 'Activo' : 'Inactivo'}</td><td className="d-flex flex-wrap gap-2"><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => editUser(item)}>Editar</Button><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => toggleUser(item)}>{item.activo ? 'Desactivar' : 'Activar'}</Button><Button size="sm" variant="outline-secondary" disabled={busy} onClick={() => { setResetId(item.id); setNewPassword(''); setResetConfirmation('') }}>Restablecer clave</Button></td></tr>)}</tbody></Table></div>
+      {resetId && <Form onSubmit={resetPassword} className="border rounded p-3 mt-3"><h4 className="h6">Restablecer contraseña de {users.find((item) => item.id === resetId)?.username}</h4><Form.Group controlId="reset-password"><Form.Label>Nueva contraseña</Form.Label><Form.Control required minLength={8} type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></Form.Group><Form.Group controlId="reset-password-confirmation" className="mt-2"><Form.Label>Confirmar nueva contraseña</Form.Label><Form.Control required minLength={8} type="password" autoComplete="new-password" value={resetConfirmation} onChange={(e) => setResetConfirmation(e.target.value)} /></Form.Group><div className="d-flex gap-2 mt-2"><Button type="submit" disabled={busy}>Guardar y cerrar sesiones</Button><Button type="button" variant="outline-secondary" onClick={() => { setResetId(''); setNewPassword(''); setResetConfirmation('') }}>Cancelar</Button></div></Form>}
     </Card.Body></Card>
     <Card className="app-surface"><Card.Body>
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2"><h3 className="h5 mb-0">Actividad de cuentas</h3><Button type="button" size="sm" variant="outline-secondary" disabled={busy} onClick={() => refresh().catch((err) => setError(err.message || 'No se pudo actualizar la actividad'))}>Actualizar</Button></div>

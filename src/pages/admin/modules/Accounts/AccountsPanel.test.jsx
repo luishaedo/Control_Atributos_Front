@@ -15,6 +15,7 @@ beforeEach(() => {
   api.listarAuditoriaCuentas.mockResolvedValue({ items: [{ id: 'a1', entidad: 'USUARIO', entidadId: 'u1', actor: 'admin', createdAt: '2026-10-03T12:00:00.000Z', cambios: { passwordReset: true } }] })
   api.actualizarUsuario.mockResolvedValue({ ok: true })
   api.actualizarSucursal.mockResolvedValue({ ok: true })
+  api.crearUsuario.mockResolvedValue({ ok: true })
 })
 
 afterEach(() => cleanup())
@@ -38,10 +39,50 @@ it('restablece la contraseña de la cuenta elegida tras confirmar y limpia el ca
   render(<AccountsPanel />)
   fireEvent.click(await screen.findByRole('button', { name: 'Restablecer clave' }))
   fireEvent.change(screen.getByLabelText('Nueva contraseña'), { target: { value: 'nuevaClave123' } })
+  fireEvent.change(screen.getByLabelText('Confirmar nueva contraseña'), { target: { value: 'nuevaClave123' } })
   fireEvent.click(screen.getByRole('button', { name: 'Guardar y cerrar sesiones' }))
   await waitFor(() => expect(api.actualizarUsuario).toHaveBeenCalledWith('u1', { password: 'nuevaClave123' }))
   await waitFor(() => expect(screen.queryByText('Restablecer contraseña de ana')).not.toBeInTheDocument())
   expect(screen.queryByDisplayValue('nuevaClave123')).not.toBeInTheDocument()
+  vi.restoreAllMocks()
+})
+
+it('no crea un usuario si la contraseña inicial y su confirmación difieren', async () => {
+  render(<AccountsPanel />)
+  fireEvent.change(await screen.findByLabelText('Usuario', { exact: true }), { target: { value: 'nuevo' } })
+  fireEvent.change(screen.getAllByLabelText('Nombre', { exact: true })[1], { target: { value: 'Nuevo' } })
+  fireEvent.change(screen.getByLabelText('Sucursal', { exact: true }), { target: { value: 's1' } })
+  fireEvent.change(screen.getByLabelText('Contraseña inicial'), { target: { value: 'claveInicial123' } })
+  fireEvent.change(screen.getByLabelText('Confirmar contraseña inicial'), { target: { value: 'otraClave123' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Crear usuario' }))
+  expect(await screen.findByText('La confirmación no coincide con la contraseña inicial')).toBeInTheDocument()
+  expect(api.crearUsuario).not.toHaveBeenCalled()
+})
+
+it('crea el usuario sin enviar la confirmación de contraseña al servidor', async () => {
+  render(<AccountsPanel />)
+  fireEvent.change(await screen.findByLabelText('Usuario', { exact: true }), { target: { value: 'nuevo' } })
+  fireEvent.change(screen.getAllByLabelText('Nombre', { exact: true })[1], { target: { value: 'Nuevo' } })
+  fireEvent.change(screen.getByLabelText('Sucursal', { exact: true }), { target: { value: 's1' } })
+  fireEvent.change(screen.getByLabelText('Contraseña inicial'), { target: { value: 'claveInicial123' } })
+  fireEvent.change(screen.getByLabelText('Confirmar contraseña inicial'), { target: { value: 'claveInicial123' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Crear usuario' }))
+  await waitFor(() => expect(api.crearUsuario).toHaveBeenCalledWith({
+    username: 'nuevo', nombre: 'Nuevo', rol: 'OPERADOR', sucursalId: 's1', password: 'claveInicial123',
+  }))
+  expect(screen.getByLabelText('Confirmar contraseña inicial')).toHaveValue('')
+})
+
+it('no restablece una contraseña si la confirmación difiere', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<AccountsPanel />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Restablecer clave' }))
+  fireEvent.change(screen.getByLabelText('Nueva contraseña'), { target: { value: 'nuevaClave123' } })
+  fireEvent.change(screen.getByLabelText('Confirmar nueva contraseña'), { target: { value: 'otraClave123' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar y cerrar sesiones' }))
+  expect(await screen.findByText('La confirmación no coincide con la nueva contraseña')).toBeInTheDocument()
+  expect(confirm).not.toHaveBeenCalled()
+  expect(api.actualizarUsuario).not.toHaveBeenCalled()
   vi.restoreAllMocks()
 })
 
