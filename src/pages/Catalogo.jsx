@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { Card, Form, Button, Table, Row, Col, Pagination, Badge } from 'react-bootstrap'
+import { Link } from 'react-router-dom'
 import { getDictionaries } from '../services/api'
 import { getMaestroList } from '../services/api'
 import { pad2 } from '../utils/sku'
+import { EmptyState } from '../components/ui.jsx'
 
 export default function Catalogo() {
   const [dic, setDic] = useState(null)
@@ -11,28 +13,44 @@ export default function Catalogo() {
   const [pageSize] = useState(50)
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
+  const [catalogError, setCatalogError] = useState('')
+  const [dictionaryError, setDictionaryError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [retryKey, setRetryKey] = useState(0)
   const pages = Math.max(1, Math.ceil(total / pageSize))
 
   useEffect(() => {
-    getDictionaries().then(setDic).catch(()=>{})
-  }, [])
+    let current = true
+    getDictionaries().then((data) => { if (current) { setDic(data); setDictionaryError('') } })
+      .catch(() => { if (current) setDictionaryError('No pudimos cargar los diccionarios.') })
+    return () => { current = false }
+  }, [retryKey])
 
   useEffect(() => {
+    let current = true
+    setLoading(true)
     getMaestroList({ q, page, pageSize })
-      .then(r => { setRows(r.items || []); setTotal(r.total || 0) })
-      .catch(()=>{})
-  }, [q, page, pageSize])
+      .then(r => { if (current) { setRows(r.items || []); setTotal(r.total || 0); setCatalogError('') } })
+      .catch(() => { if (current) { setRows([]); setTotal(0); setCatalogError('No pudimos cargar el maestro. Verificá la conexión y reintentá.') } })
+      .finally(() => { if (current) setLoading(false) })
+    return () => { current = false }
+  }, [q, page, pageSize, retryKey])
 
   return (
-    <div className="container py-3">
+    <div className="container py-4 app-page">
+      <div className="app-page-heading">
+        <div><div className="app-eyebrow">Consulta</div><h1>Catálogo</h1><p>Explorá el maestro y los códigos disponibles.</p></div>
+        <Link className="btn btn-outline-secondary" to="/">Volver al escaneo</Link>
+      </div>
       <Row className="g-3">
         <Col md={4}>
-          <Card>
-            <Card.Header>Diccionarios</Card.Header>
+          <Card className="app-surface">
+            <Card.Header><strong>Diccionarios</strong></Card.Header>
             <Card.Body className="small">
+              {dictionaryError && <div className="alert alert-warning" role="alert">{dictionaryError} <Button size="sm" variant="outline-secondary" onClick={() => setRetryKey(k => k + 1)}>Reintentar</Button></div>}
               <div className="mb-3">
                 <div className="fw-semibold mb-1">Categorías</div>
-                <Table size="sm" bordered hover>
+                <Table responsive size="sm" bordered hover>
                   <thead><tr><th>Cod</th><th>Nombre</th></tr></thead>
                   <tbody>
                     {(dic?.categorias||[]).map((d)=>(
@@ -43,7 +61,7 @@ export default function Catalogo() {
               </div>
               <div className="mb-3">
                 <div className="fw-semibold mb-1">Tipos</div>
-                <Table size="sm" bordered hover>
+                <Table responsive size="sm" bordered hover>
                   <thead><tr><th>Cod</th><th>Nombre</th></tr></thead>
                   <tbody>
                     {(dic?.tipos||[]).map((d)=>(
@@ -54,7 +72,7 @@ export default function Catalogo() {
               </div>
               <div>
                 <div className="fw-semibold mb-1">Clasificación</div>
-                <Table size="sm" bordered hover>
+                <Table responsive size="sm" bordered hover>
                   <thead><tr><th>Cod</th><th>Nombre</th></tr></thead>
                   <tbody>
                     {(dic?.clasif||[]).map((d)=>(
@@ -68,11 +86,12 @@ export default function Catalogo() {
         </Col>
 
         <Col md={8}>
-          <Card>
-            <Card.Header className="d-flex align-items-center gap-2">
+          <Card className="app-surface">
+            <Card.Header className="d-flex align-items-center flex-wrap gap-2">
               <div className="fw-semibold">Maestro</div>
               <div className="ms-auto d-flex gap-2">
                 <Form.Control
+                  aria-label="Buscar SKU o descripción en el maestro"
                   size="sm"
                   placeholder="Buscar SKU o descripción"
                   value={q}
@@ -82,8 +101,11 @@ export default function Catalogo() {
               </div>
             </Card.Header>
             <Card.Body>
-              <div className="mb-2 text-muted small">Total: {total}</div>
-              <Table size="sm" bordered hover className="align-middle">
+              {catalogError && <div className="alert alert-warning" role="alert">{catalogError} <Button size="sm" variant="outline-secondary" onClick={() => setRetryKey(k => k + 1)}>Reintentar</Button></div>}
+              {loading && <p role="status" className="text-muted">Cargando artículos…</p>}
+              {!loading && !catalogError && <div className="mb-2 text-muted small">Total: {total}</div>}
+              {!loading && !catalogError && !rows.length && <EmptyState title="Sin artículos" subtitle={q ? 'No hay resultados para esta búsqueda.' : 'El maestro aún no contiene artículos.'} />}
+              {!loading && !catalogError && rows.length > 0 && <Table responsive size="sm" bordered hover className="align-middle">
                 <thead>
                   <tr>
                     <th>SKU</th>
@@ -104,9 +126,9 @@ export default function Catalogo() {
                     </tr>
                   ))}
                 </tbody>
-              </Table>
+              </Table>}
 
-              <div className="d-flex justify-content-center">
+              {!loading && !catalogError && rows.length > 0 && <div className="d-flex justify-content-center">
                 <Pagination size="sm">
                   <Pagination.First onClick={()=>setPage(1)} disabled={page===1}/>
                   <Pagination.Prev onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}/>
@@ -114,7 +136,7 @@ export default function Catalogo() {
                   <Pagination.Next onClick={()=>setPage(p=>Math.min(pages,p+1))} disabled={page===pages}/>
                   <Pagination.Last onClick={()=>setPage(pages)} disabled={page===pages}/>
                 </Pagination>
-              </div>
+              </div>}
             </Card.Body>
           </Card>
         </Col>

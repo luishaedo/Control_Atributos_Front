@@ -247,9 +247,10 @@ export default function ScanBox({ campania }) {
   }
 
   return (
-    <Card>
+    <Card className="app-surface scan-panel">
       <Card.Header>
-        <strong>Escaneo</strong>
+        <div className="app-eyebrow">Operación</div>
+        <strong>Escanear artículo</strong>
       </Card.Header>
       <Card.Body>
         {!canScan && (
@@ -262,8 +263,8 @@ export default function ScanBox({ campania }) {
           />
         )}
         <Form onSubmit={procesar}>
-          <Row className="g-2 align-items-end">
-            <Col md={7}>
+          <Row className="g-3 align-items-end">
+            <Col lg={5}>
               <Form.Group>
                 <Form.Label>Artículo</Form.Label>
                 <Form.Control
@@ -281,10 +282,10 @@ export default function ScanBox({ campania }) {
                 />
               </Form.Group>
             </Col>
-            <Col md={5}>
+            <Col lg={7} className="scan-actions">
               <AppButton
                 type="submit"
-                className="btn btn-primary me-2"
+                className="btn btn-outline-primary"
                 state={!canScan ? 'disabled' : processButtonState}
                 label="Validar SKU"
                 loadingLabel="Validando SKU…"
@@ -293,7 +294,7 @@ export default function ScanBox({ campania }) {
               />
                 <AppButton
                   type="button"
-                  className="btn btn-success"
+                  className="btn btn-primary"
                   state={!resultado || !campania?.id || !canScan || hasDirtySkuAfterValidation ? 'disabled' : saveButtonState}
                   onClick={guardarYContinuar}
                   label="Registrar observación"

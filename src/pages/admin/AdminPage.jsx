@@ -44,6 +44,7 @@ export default function AdminPage() {
     showEditModal,
     setShowEditModal,
     editCampaign,
+    campaignMessage,
     setEditCampaign,
     openEditCampaign,
     saveCampaignEdition,
@@ -105,11 +106,11 @@ export default function AdminPage() {
     <div>
       <Topbar
         user={user}
-        onChangeUser={() => {}}
+        onChangeUser={logout}
         onClearUser={logout}
       />
 
-      <Container className="pb-5 u-section-stack">
+      <Container className="pb-5 u-section-stack app-page">
         <AdminAuthPanel
           credentials={credentials}
           authOK={authOK}
@@ -121,16 +122,14 @@ export default function AdminPage() {
         />
 
         <div className={!authOK ? 'admin-content-locked' : ''}>
-          <div className="d-flex justify-content-end u-mb-16 gap-2">
-            <Button variant={activeAdminTab === 'campanias' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('campanias')}>
-              Campaña
-            </Button>
-            <Button variant={activeAdminTab === 'import' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('import')}>
-              Maestro
-            </Button>
-            <Button variant="outline-secondary" onClick={() => navigate('/auditoria')}>
-              Auditoría
-            </Button>
+          <div className="app-page-heading">
+            <div><div className="app-eyebrow">Panel de gestión</div><h1>Administración</h1><p>Revisá observaciones, gestioná campañas y consultá el maestro.</p></div>
+          </div>
+          <div className="admin-navigation u-mb-16" role="navigation" aria-label="Secciones de administración">
+            <Button variant={activeAdminTab === 'revisiones' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('revisiones')} aria-current={activeAdminTab === 'revisiones' ? 'page' : undefined}>Revisiones</Button>
+            <Button variant={activeAdminTab === 'campanias' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('campanias')} aria-current={activeAdminTab === 'campanias' ? 'page' : undefined}>Campañas</Button>
+            <Button variant={activeAdminTab === 'import' ? 'primary' : 'outline-secondary'} onClick={() => setActiveAdminTab('import')} aria-current={activeAdminTab === 'import' ? 'page' : undefined}>Maestro e importaciones</Button>
+            <Button variant="outline-secondary" onClick={() => navigate('/auditoria')}>Auditoría</Button>
           </div>
 
           {activeAdminTab === 'revisiones' && <RevisionesPanel campaigns={campaigns} authOK={authOK} />}
@@ -181,6 +180,7 @@ export default function AdminPage() {
             <CampaignManagementPanel
               authOK={authOK}
               campaigns={campaigns}
+              campaignMessage={campaignMessage}
               newCampaign={newCampaign}
               onNewCampaignChange={setNewCampaign}
               onCreateCampaign={createCampaign}

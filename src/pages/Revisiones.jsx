@@ -1,5 +1,5 @@
 // src/pages/Revisiones.jsx
-import React, { useCallback, useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Card,
@@ -64,6 +64,9 @@ async function descargarBlobDesdeUrl(url, nombre) {
 }
 
 export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
+  const [confirmMoving, setConfirmMoving] = useState(false)
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+  const [closingCampaign, setClosingCampaign] = useState(false)
   const {
     activeTab, setActiveTab, dic, setDic, uiMessage, setUiMessage, messageTimeoutRef,
     campaniaId, setCampaniaId, sku, setSku, consenso, setConsenso, soloDif, setSoloDif, items, setItems,
@@ -491,6 +494,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   }
 
   async function onApplyConfirmation() {
+    if (confirmMoving || !confirmItems.length) return
     const updates = (confirmItems || []).map((item) => {
       const target = confirmTargets[item.sku] || 'consolidate'
       const isUnknown = String(item?.skuType || '').toUpperCase() === 'UNKNOWN'
@@ -499,6 +503,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
     })
 
     try {
+      setConfirmMoving(true)
       await Promise.all(
         updates.map((entry) =>
           moverEtapa({
@@ -521,8 +526,10 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       setToast({
         show: true,
         variant: 'danger',
-        message: e?.message || 'No se pudo actualizar la etapa en el servidor.',
+        message: `No se pudieron completar todos los movimientos. Algunos pueden haberse aplicado. Actualizá la vista antes de reintentar. ${e?.message || ''}`.trim(),
       })
+    } finally {
+      setConfirmMoving(false)
     }
   }
 
@@ -605,8 +612,13 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
   }
 
   async function onCloseCampaign() {
+    if (closingCampaign) return
+    let closed = false
     try {
+      setClosingCampaign(true)
       const response = await cerrarCampania(Number(campaniaId))
+      closed = true
+      setShowCloseConfirm(false)
       if (response?.summary) {
         setCloseSummary(response.summary)
       } else {
@@ -638,8 +650,12 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
       setToast({
         show: true,
         variant: 'danger',
-        message: e?.message || 'No se pudo cerrar la campaña.'
+        message: closed
+          ? `La campaña se cerró, pero falló una descarga. Podés descargar los archivos nuevamente. ${e?.message || ''}`.trim()
+          : (e?.message || 'No se pudo confirmar el cierre de la campaña. Actualizá el estado antes de reintentar.')
       })
+    } finally {
+      setClosingCampaign(false)
     }
   }
 
@@ -1181,7 +1197,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 }}
                 className={`mb-3 ${bordeWidth} ${borde}`}
               >
-                <Card.Header className="d-flex justify-content-between align-items-center">
+                <Card.Header className="d-flex justify-content-between align-items-center flex-wrap gap-2">
                   <div className="d-flex align-items-center gap-3">
                     <strong className="fs-5">{it.sku}</strong>
                     {it.hayConsenso
@@ -1194,7 +1210,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                   <Row className="g-3">
                     <Col md={5}>
                       <h6>Original (maestro)</h6>
-                      <Table size="sm" bordered>
+                      <Table responsive size="sm" bordered>
                         <tbody>
                           <tr><td>Categoría</td><td>{etiquetaNombre(dic?.categorias, it.maestro?.categoria_cod)}</td></tr>
                           <tr><td>Tipo</td><td>{etiquetaNombre(dic?.tipos, it.maestro?.tipo_cod)}</td></tr>
@@ -1202,7 +1218,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                         </tbody>
                       </Table>
                       <h6 className="mt-3">Sugerido aceptado</h6>
-                      <Table size="sm" bordered>
+                      <Table responsive size="sm" bordered>
                         <tbody>
                           <tr>
                             <td>Categoría</td>
@@ -1274,7 +1290,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                         if (!filteredOptions.length && isVerified) {
                           return (
                             <Card key={field} className="mb-2 border-0 bg-light">
-                              <Card.Body className="py-2 d-flex align-items-center justify-content-between">
+                              <Card.Body className="py-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
                                 <div className="fw-semibold">{label}</div>
                                 <Badge bg="success">Verificado</Badge>
                               </Card.Body>
@@ -1284,7 +1300,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                         if (!filteredOptions.length) {
                           return (
                             <Card key={field} className="mb-2 border-0 bg-light">
-                              <Card.Body className="py-2 d-flex align-items-center justify-content-between">
+                              <Card.Body className="py-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
                                 <div className="fw-semibold">{label}</div>
                                 <Badge bg="secondary">Sin sugerencias</Badge>
                               </Card.Body>
@@ -1294,7 +1310,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                         return (
                           <Card key={field} className="mb-3 border-0 shadow-sm">
                             <Card.Body>
-                              <div className="d-flex align-items-center justify-content-between">
+                              <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
                                 <div className="fw-semibold">{label}</div>
                                 <div className="text-muted small">{meta.total} votos</div>
                               </div>
@@ -1360,7 +1376,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                             {it.propsFiltradas.map((p, idx) => (
                               <Card key={idx} className="mb-2">
                                 <Card.Body>
-                                  <div className="d-flex justify-content-between align-items-center">
+                                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
                                     <div>
                                       <div><strong>{p.count}</strong> votos</div>
                                       <div className="small text-muted">
@@ -1409,7 +1425,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
 
           {activeEvalTab === 'unknown' && (
             <Card>
-              <Card.Header className="d-flex justify-content-between align-items-center">
+              <Card.Header className="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <strong>SKUs desconocidos</strong>
                 <small className="text-muted">Completá las 3 características para enviarlos a Confirmación.</small>
               </Card.Header>
@@ -1542,8 +1558,8 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                   Ordenados por cantidad de cambios. Podés devolver a Evaluar si hace falta.
                 </div>
               </div>
-              <Button variant="primary" onClick={onApplyConfirmation} disabled={confirmLoading}>
-                Mover seleccionados
+              <Button variant="primary" onClick={onApplyConfirmation} disabled={confirmLoading || confirmMoving || !confirmItems.length}>
+                {confirmMoving ? 'Moviendo…' : 'Mover todos según destino'}
               </Button>
             </Card.Header>
             <Card.Body>
@@ -1559,6 +1575,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                       <th>Cambios</th>
                       <th>Verificados</th>
                       <th>Estado</th>
+                      <th>Destino</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1579,6 +1596,9 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                       return (
                         <tr key={item.sku}>
                           <td>{item.sku}</td>
+                          <td>
+                            <Badge bg={isUnknown ? 'warning' : 'secondary'} text={isUnknown ? 'dark' : undefined}>{isUnknown ? 'Desconocido' : 'Maestro'}</Badge>
+                          </td>
                           <td>
                             {changesEntries.length ? (
                               changesEntries.map(([field, value]) => {
@@ -1673,7 +1693,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                 >
                   Descargar desconocidos (3 TXT)
                 </Button>
-                <Button variant="success" onClick={onCloseCampaign} disabled={consolidateLoading || exportLoading}>
+                <Button variant="success" onClick={() => setShowCloseConfirm(true)} disabled={consolidateLoading || exportLoading || closingCampaign || !campaniaId}>
                   Cerrar campaña
                 </Button>
               </div>
@@ -1701,6 +1721,7 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
                       return (
                         <tr key={item.sku}>
                           <td>{item.sku}</td>
+                          <td><Badge bg={isUnknown ? 'warning' : 'secondary'} text={isUnknown ? 'dark' : undefined}>{isUnknown ? 'Desconocido' : 'Maestro'}</Badge></td>
                           <td>
                             {changeEntries.length ? (
                               changeEntries.map(([field, value]) => {
@@ -1731,6 +1752,17 @@ export default function Revisiones({ campanias, campaniaIdDefault, authOK }) {
           </Card>
         </Tab>
       </Tabs>
+      <Modal show={showCloseConfirm} onHide={() => !closingCampaign && setShowCloseConfirm(false)} centered>
+        <Modal.Header closeButton={!closingCampaign}><Modal.Title>Confirmar cierre</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">Vas a cerrar <strong>{campanias.find(c => String(c.id) === String(campaniaId))?.nombre || `campaña ${campaniaId}`}</strong>.</p>
+          <p className="mb-0 text-muted">Se aplicarán las decisiones confirmadas y se descargarán los archivos de cierre. Revisá la confirmación antes de continuar.</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowCloseConfirm(false)} disabled={closingCampaign}>Cancelar</Button>
+          <Button variant="success" onClick={onCloseCampaign} disabled={closingCampaign}>{closingCampaign ? 'Cerrando…' : 'Cerrar campaña'}</Button>
+        </Modal.Footer>
+      </Modal>
       <Modal show={Boolean(closeSummary)} onHide={() => setCloseSummary(null)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Cierre de campaña</Modal.Title>

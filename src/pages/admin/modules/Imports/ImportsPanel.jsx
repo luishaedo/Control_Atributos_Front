@@ -19,11 +19,12 @@ export default function ImportsPanel({
   onImportOmittedRow,
 }) {
   return (
-    <Card className="mb-3">
-      <Card.Header>Importar por Archivo (CSV)</Card.Header>
+    <Card className="mb-3 app-surface">
+      <Card.Header><div className="app-eyebrow">Carga de datos</div><strong>Importar archivos CSV</strong></Card.Header>
       <Card.Body>
         <Row className="g-3">
-          <Col md={6}>
+          <Col lg={6}>
+            <div className="import-section">
             <div className="mb-2 fw-semibold">Diccionarios</div>
             <div className="d-flex flex-wrap gap-2 mb-3">
               <Button size="sm" variant="outline-primary" href="/templates/plantilla-categorias.csv" download>Plantilla categorías</Button>
@@ -71,9 +72,11 @@ export default function ImportsPanel({
               successLabel="Diccionarios cargados"
               errorLabel="Error al subir"
             />
+            </div>
           </Col>
 
-          <Col md={6}>
+          <Col lg={6}>
+            <div className="import-section">
             <div className="mb-2 fw-semibold">Maestro</div>
             <div className="mb-3">
               <Button size="sm" variant="outline-primary" href="/templates/plantilla-maestro.csv" download>Descargar plantilla maestro</Button>
@@ -99,6 +102,7 @@ export default function ImportsPanel({
               successLabel="Maestro cargado"
               errorLabel="Error al subir"
             />
+            </div>
           </Col>
         </Row>
 

@@ -16,6 +16,7 @@ export function useCampaignManagement({ setError }) {
   const [newCampaign, setNewCampaign] = useState(emptyCampaign)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editCampaign, setEditCampaign] = useState(null)
+  const [campaignMessage, setCampaignMessage] = useState('')
 
   const loadCampaigns = useCallback(async () => {
     try {
@@ -23,7 +24,9 @@ export function useCampaignManagement({ setError }) {
       setCampaigns(list)
       setError(null)
     } catch (error) {
-      setError(error.message || 'No se pudieron cargar las campañas')
+      setError(/failed to fetch|networkerror/i.test(error?.message || '')
+        ? 'No pudimos conectar con el servicio para cargar campañas. Verificá la conexión y reintentá.'
+        : (error.message || 'No se pudieron cargar las campañas'))
       if (import.meta.env.DEV) {
         console.warn('[admin] campaign load failed', error)
       }
@@ -33,11 +36,13 @@ export function useCampaignManagement({ setError }) {
   const createCampaign = useCallback(async () => {
     try {
       setError(null)
+      setCampaignMessage('')
       const response = await crearCampania({ ...newCampaign, activa: false })
-      alert(`Campaña creada: ${response.id}`)
+      setCampaignMessage(`Campaña creada correctamente (ID ${response.id}). Podés revisarla y activarla cuando esté lista.`)
       setNewCampaign(emptyCampaign)
       loadCampaigns()
     } catch (error) {
+      setCampaignMessage('')
       setError(error.message || 'Error creando campaña')
     }
   }, [loadCampaigns, newCampaign, setError])
@@ -45,8 +50,10 @@ export function useCampaignManagement({ setError }) {
   const activateCampaign = useCallback(async (id) => {
     try {
       await activarCampania(id)
+      setCampaignMessage('Campaña activada correctamente.')
       loadCampaigns()
     } catch (error) {
+      setCampaignMessage('')
       setError(error.message || 'No se pudo activar')
     }
   }, [loadCampaigns, setError])
@@ -78,8 +85,10 @@ export function useCampaignManagement({ setError }) {
       })
       setShowEditModal(false)
       setEditCampaign(null)
+      setCampaignMessage('Cambios de campaña guardados correctamente.')
       loadCampaigns()
     } catch (error) {
+      setCampaignMessage('')
       setError(error.message || 'No se pudo actualizar la campaña')
     }
   }, [editCampaign, loadCampaigns, setError])
@@ -94,6 +103,7 @@ export function useCampaignManagement({ setError }) {
     showEditModal,
     setShowEditModal,
     editCampaign,
+    campaignMessage,
     setEditCampaign,
     openEditCampaign,
     saveCampaignEdition,

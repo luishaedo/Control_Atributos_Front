@@ -22,7 +22,8 @@ export default function IdentityModal({
 
   const isValid = Boolean(username.trim()) && Boolean(password)
 
-  function handleSave() {
+  function handleSave(event) {
+    event?.preventDefault()
     if (!isValid || busy) return
     onSave?.({ username: username.trim(), password })
   }
@@ -48,8 +49,9 @@ export default function IdentityModal({
       <Modal.Header closeButton={canClose}>
         <Modal.Title>Iniciar sesión</Modal.Title>
       </Modal.Header>
+      <Form onSubmit={handleSave}>
       <Modal.Body>
-        <Form.Group className="mb-3">
+        <Form.Group className="mb-3" controlId="session-username">
           <Form.Label>Usuario</Form.Label>
           <Form.Control
             type="text"
@@ -61,7 +63,7 @@ export default function IdentityModal({
             disabled={busy}
           />
         </Form.Group>
-        <Form.Group>
+        <Form.Group controlId="session-password">
           <Form.Label>Contraseña</Form.Label>
           <Form.Control
             type="password"
@@ -72,7 +74,7 @@ export default function IdentityModal({
             disabled={busy}
           />
         </Form.Group>
-        {error && <div className="text-danger small mt-2">{error}</div>}
+        {error && <div className="text-danger small mt-2" role="alert">{error}</div>}
         {!isValid && (
           <div className="text-muted small mt-2">
             Completá usuario y contraseña para continuar.
@@ -85,10 +87,11 @@ export default function IdentityModal({
             Cancelar
           </Button>
         )}
-        <Button variant="primary" onClick={handleSave} disabled={!isValid}>
+        <Button type="submit" variant="primary" disabled={!isValid || busy}>
           {busy ? 'Ingresando...' : 'Ingresar'}
         </Button>
       </Modal.Footer>
+      </Form>
     </Modal>
   )
 }
