@@ -67,11 +67,13 @@ export default function AdminPage() {
     masterFile,
     setMasterFile,
     importMessage,
+    omittedRows,
     isUploading,
     dictionaryUploadButtonState,
     masterUploadButtonState,
     importDictionaries,
     importMaster,
+    importOmittedRow,
   } = useImports({ setError, refreshPreview: loadPreview })
 
   useEffect(() => {
@@ -147,6 +149,8 @@ export default function AdminPage() {
                 onImportMaster={importMaster}
                 masterUploadButtonState={masterUploadButtonState}
                 importMessage={importMessage}
+                omittedRows={omittedRows}
+                onImportOmittedRow={importOmittedRow}
               />
 
               <div className="d-flex justify-content-end u-mb-16">
