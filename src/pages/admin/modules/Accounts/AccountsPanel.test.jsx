@@ -14,6 +14,7 @@ beforeEach(() => {
   api.listarUsuarios.mockResolvedValue({ items: [{ id: 'u1', username: 'ana', nombre: 'Ana', rol: 'OPERADOR', activo: true, sucursal: { id: 's1' } }] })
   api.listarAuditoriaCuentas.mockResolvedValue({ items: [{ id: 'a1', entidad: 'USUARIO', entidadId: 'u1', actor: 'admin', createdAt: '2026-10-03T12:00:00.000Z', cambios: { passwordReset: true } }] })
   api.actualizarUsuario.mockResolvedValue({ ok: true })
+  api.actualizarSucursal.mockResolvedValue({ ok: true })
 })
 
 afterEach(() => cleanup())
@@ -41,5 +42,22 @@ it('restablece la contraseña de la cuenta elegida tras confirmar y limpia el ca
   await waitFor(() => expect(api.actualizarUsuario).toHaveBeenCalledWith('u1', { password: 'nuevaClave123' }))
   await waitFor(() => expect(screen.queryByText('Restablecer contraseña de ana')).not.toBeInTheDocument())
   expect(screen.queryByDisplayValue('nuevaClave123')).not.toBeInTheDocument()
+  vi.restoreAllMocks()
+})
+
+it('pide confirmación antes de desactivar una cuenta o sucursal y explica la revocación', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  render(<AccountsPanel />)
+  const deactivateButtons = await screen.findAllByRole('button', { name: 'Desactivar' })
+  fireEvent.click(deactivateButtons[0])
+  fireEvent.click(deactivateButtons[1])
+  expect(confirm).toHaveBeenCalledWith(expect.stringContaining('sesiones de sus usuarios'))
+  expect(confirm).toHaveBeenCalledWith(expect.stringContaining('cerrarán sus sesiones'))
+  expect(api.actualizarSucursal).not.toHaveBeenCalled()
+  expect(api.actualizarUsuario).not.toHaveBeenCalled()
+
+  confirm.mockReturnValue(true)
+  fireEvent.click(deactivateButtons[0])
+  await waitFor(() => expect(api.actualizarSucursal).toHaveBeenCalledWith('s1', { activa: false }))
   vi.restoreAllMocks()
 })
